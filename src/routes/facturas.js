@@ -6,7 +6,53 @@ const { verificarAuth, soloJefes, soloAdmin } = require("../middleware/auth");
 const router = express.Router();
 
 // ==========================================
-// RUTAS CRUD BÁSICAS
+// RUTAS ESPECÍFICAS PARA SIVEC (PRIMERO)
+// ==========================================
+
+/**
+ * GET /api/facturas/form-data - Obtener datos para el formulario
+ * Headers: Authorization: Bearer <token>
+ */
+router.get(
+  "/form-data",
+  verificarAuth,
+  facturaController.obtenerDatosFormulario
+);
+
+/**
+ * GET /api/facturas/status/pendientes - Facturas pendientes (estado 1)
+ * Headers: Authorization: Bearer <token>
+ */
+router.get(
+  "/status/pendientes",
+  verificarAuth,
+  facturaController.obtenerPendientes
+);
+
+/**
+ * GET /api/facturas/status/despachadas - Facturas despachadas (estado 2)
+ * Headers: Authorization: Bearer <token>
+ * Query params: ?fecha_desde=2024-01-01&fecha_hasta=2024-12-31
+ */
+router.get(
+  "/status/despachadas",
+  verificarAuth,
+  facturaController.obtenerDespachadas
+);
+
+/**
+ * GET /api/facturas/reportes/estadisticas - Estadísticas de facturas
+ * Headers: Authorization: Bearer <token>
+ * Query params: ?fecha_desde=2024-01-01&fecha_hasta=2024-12-31
+ */
+router.get(
+  "/reportes/estadisticas",
+  verificarAuth,
+  facturaController.obtenerEstadisticas
+);
+
+// ==========================================
+// RUTAS CRUD BÁSICAS (DESPUÉS)
 // ==========================================
 
 /**
@@ -40,41 +86,5 @@ router.put("/:id", verificarAuth, soloJefes, facturaController.actualizar);
  * Headers: Authorization: Bearer <token>
  */
 router.delete("/:id", verificarAuth, soloJefes, facturaController.eliminar);
-
-// ==========================================
-// RUTAS ESPECÍFICAS PARA SIVEC
-// ==========================================
-
-/**
- * GET /api/facturas/status/pendientes - Facturas pendientes (estado 1)
- * Headers: Authorization: Bearer <token>
- */
-router.get(
-  "/status/pendientes",
-  verificarAuth,
-  facturaController.obtenerPendientes
-);
-
-/**
- * GET /api/facturas/status/despachadas - Facturas despachadas (estado 2)
- * Headers: Authorization: Bearer <token>
- * Query params: ?fecha_desde=2024-01-01&fecha_hasta=2024-12-31
- */
-router.get(
-  "/status/despachadas",
-  verificarAuth,
-  facturaController.obtenerDespachadas
-);
-
-/**
- * GET /api/facturas/reportes/estadisticas - Estadísticas de facturas
- * Headers: Authorization: Bearer <token>
- * Query params: ?fecha_desde=2024-01-01&fecha_hasta=2024-12-31
- */
-router.get(
-  "/reportes/estadisticas",
-  verificarAuth,
-  facturaController.obtenerEstadisticas
-);
 
 module.exports = router;

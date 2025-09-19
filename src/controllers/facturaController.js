@@ -1,5 +1,7 @@
 // src/controllers/facturaController.js
 const facturaService = require("../services/facturaService");
+const pilotoService = require("../services/pilotoService");
+const vehiculoService = require("../services/vehiculoService");
 
 const facturaController = {
   /**
@@ -286,6 +288,61 @@ const facturaController = {
         success: false,
         error: error.message,
         message: "Error al obtener estadísticas",
+      });
+    }
+  },
+
+  /**
+   * GET /api/facturas/form-data - Datos para formulario de asignar factura
+   */
+  async obtenerDatosFormulario(req, res) {
+    try {
+      console.log(
+        `📋 Obteniendo datos para formulario - Usuario: ${req.usuario.nombre_usuario}`
+      );
+      console.log("👤 Datos completos del usuario:", req.usuario); // <- AGREGAR ESTA LÍNEA
+
+      // Obtener pilotos desde SQL Server (sin restricciones)
+      const pilotos = await pilotoService.obtenerTodosPilotos();
+
+      // Verificar que el usuario tenga sucursal_id
+      if (!req.usuario.sucursal_id) {
+        console.log("⚠️ Usuario sin sucursal_id asignada");
+        return res.status(400).json({
+          success: false,
+          error: "Usuario sin sucursal asignada",
+          message:
+            "El usuario debe tener una sucursal asignada para ver vehículos",
+        });
+      }
+
+      // Obtener vehículos desde Supabase (filtrados por sucursal del usuario)
+      const vehiculos = await vehiculoService.obtenerVehiculosPorSucursal(
+        req.usuario.sucursal_id
+      );
+
+      console.log(
+        `✅ Datos obtenidos: ${pilotos.length} pilotos, ${vehiculos.length} vehículos`
+      );
+
+      res.json({
+        success: true,
+        data: {
+          pilotos: pilotos,
+          vehiculos: vehiculos,
+          sucursal_usuario: req.usuario.sucursal_id,
+        },
+        message: "Datos para formulario obtenidos exitosamente",
+      });
+    } catch (error) {
+      console.error(
+        "❌ Error al obtener datos para formulario:",
+        error.message
+      );
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error al obtener datos para formulario",
       });
     }
   },
