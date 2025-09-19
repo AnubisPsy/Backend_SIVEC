@@ -50,6 +50,7 @@ const authService = {
       // En el mismo método, actualiza el payload:
       const payload = {
         usuario_id: usuario.usuario_id,
+        nombre_usuario: usuario.nombre_usuario,
         correo: usuario.correo,
         rol_id: usuario.rol_id,
         sucursal_id: usuario.sucursal_id,

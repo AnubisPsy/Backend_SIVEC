@@ -7,29 +7,33 @@ const vehiculoService = {
    */
   async obtenerVehiculosPorSucursal(sucursal_id) {
     try {
-      console.log(`🚛 Obteniendo vehículos de sucursal: ${sucursal_id}`);
+      console.log(
+        `🚛 Obteniendo vehículos activos de sucursal: ${sucursal_id}`
+      );
 
       const { data, error } = await supabase
         .from("vehiculo")
         .select(
           `
-          vehiculo_id,
-          agrupacion,
-          numero_vehiculo,
-          placa,
-          sucursal_id,
-          created_at,
-          updated_at
-        `
+        vehiculo_id,
+        agrupacion,
+        numero_vehiculo,
+        placa,
+        sucursal_id,
+        activo,
+        created_at,
+        updated_at
+      `
         )
         .eq("sucursal_id", sucursal_id)
+        .eq("activo", true) // <- FILTRAR SOLO ACTIVOS
         .order("numero_vehiculo");
 
       if (error) {
         throw new Error(`Error al obtener vehículos: ${error.message}`);
       }
 
-      console.log(`✅ ${data.length} vehículos encontrados`);
+      console.log(`✅ ${data.length} vehículos activos encontrados`);
       return data;
     } catch (error) {
       console.error("❌ Error en obtenerVehiculosPorSucursal:", error);
@@ -43,14 +47,15 @@ const vehiculoService = {
   async obtenerTodosVehiculos(filtros = {}) {
     try {
       let query = supabase.from("vehiculo").select(`
-          vehiculo_id,
-          agrupacion,
-          numero_vehiculo,
-          placa,
-          sucursal_id,
-          created_at,
-          updated_at
-        `);
+        vehiculo_id,
+        agrupacion,
+        numero_vehiculo,
+        placa,
+        sucursal_id,
+        activo,
+        created_at,
+        updated_at
+      `);
 
       // Aplicar filtros
       if (filtros.sucursal_id) {
@@ -59,6 +64,11 @@ const vehiculoService = {
 
       if (filtros.agrupacion) {
         query = query.eq("agrupacion", filtros.agrupacion);
+      }
+
+      // Filtrar solo activos por defecto, a menos que se especifique lo contrario
+      if (filtros.incluir_inactivos !== true) {
+        query = query.eq("activo", true);
       }
 
       const { data, error } = await query.order("numero_vehiculo");
