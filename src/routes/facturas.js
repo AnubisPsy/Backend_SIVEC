@@ -87,4 +87,22 @@ router.put("/:id", verificarAuth, soloJefes, facturaController.actualizar);
  */
 router.delete("/:id", verificarAuth, soloJefes, facturaController.eliminar);
 
+/**
+ * GET /api/facturas/piloto/:piloto - Facturas de un piloto específico
+ */
+router.get(
+  "/piloto/:piloto",
+  verificarAuth,
+  facturaController.obtenerFacturasPiloto
+);
+
+/**
+ * GET /api/facturas/:numero_factura/guias-disponibles - Guías disponibles
+ */
+router.get(
+  "/:numero_factura/guias-disponibles",
+  verificarAuth,
+  facturaController.obtenerGuiasDisponibles
+);
+
 module.exports = router;

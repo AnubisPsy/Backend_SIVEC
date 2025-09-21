@@ -1,40 +1,41 @@
 // src/controllers/authController.js
-const authService = require('../services/authService');
+const authService = require("../services/authService");
 
 const authController = {
-
   /**
    * POST /auth/login - Iniciar sesión
    */
   async login(req, res) {
+    console.log("📥 Body recibido:", req.body);
+    console.log("📥 Headers:", req.headers);
     try {
-      const { correo, password } = req.body;
+      // Cambiar de 'correo' a 'loginInput'
+      const { loginInput, password } = req.body;
 
-      if (!correo || !password) {
+      if (!loginInput || !password) {
         return res.status(400).json({
           success: false,
-          error: 'Correo y contraseña son requeridos',
-          message: 'Datos incompletos'
+          error: "Usuario/correo y contraseña son requeridos",
+          message: "Datos incompletos",
         });
       }
 
-      console.log(`🔐 Intento de login: ${correo}`);
+      console.log(`🔐 Intento de login: ${loginInput}`);
 
-      const resultado = await authService.login(correo, password);
+      const resultado = await authService.login(loginInput, password);
 
       res.json({
         success: true,
         data: resultado,
-        message: 'Login exitoso'
+        message: "Login exitoso",
       });
-
     } catch (error) {
-      console.error('❌ Error en login:', error.message);
+      console.error("❌ Error en login:", error.message);
 
       res.status(401).json({
         success: false,
         error: error.message,
-        message: 'Error de autenticación'
+        message: "Error de autenticación",
       });
     }
   },
@@ -46,23 +47,22 @@ const authController = {
     try {
       // El middleware verificarAuth ya validó el token
       // Solo devolvemos los datos del usuario
-      
+
       res.json({
         success: true,
         data: {
           usuario: req.usuario,
-          token_valido: true
+          token_valido: true,
         },
-        message: 'Token válido'
+        message: "Token válido",
       });
-
     } catch (error) {
-      console.error('❌ Error al verificar token:', error.message);
+      console.error("❌ Error al verificar token:", error.message);
 
       res.status(500).json({
         success: false,
         error: error.message,
-        message: 'Error al verificar token'
+        message: "Error al verificar token",
       });
     }
   },
@@ -77,16 +77,16 @@ const authController = {
       if (!password_actual || !password_nuevo) {
         return res.status(400).json({
           success: false,
-          error: 'password_actual y password_nuevo son requeridos',
-          message: 'Datos incompletos'
+          error: "password_actual y password_nuevo son requeridos",
+          message: "Datos incompletos",
         });
       }
 
       if (password_nuevo.length < 6) {
         return res.status(400).json({
           success: false,
-          error: 'La nueva contraseña debe tener al menos 6 caracteres',
-          message: 'Contraseña muy corta'
+          error: "La nueva contraseña debe tener al menos 6 caracteres",
+          message: "Contraseña muy corta",
         });
       }
 
@@ -100,16 +100,15 @@ const authController = {
 
       res.json({
         success: true,
-        message: 'Contraseña actualizada exitosamente'
+        message: "Contraseña actualizada exitosamente",
       });
-
     } catch (error) {
-      console.error('❌ Error al cambiar contraseña:', error.message);
+      console.error("❌ Error al cambiar contraseña:", error.message);
 
       res.status(400).json({
         success: false,
         error: error.message,
-        message: 'Error al cambiar contraseña'
+        message: "Error al cambiar contraseña",
       });
     }
   },
@@ -121,24 +120,23 @@ const authController = {
     try {
       // En JWT no hay logout real en el servidor
       // El cliente debe eliminar el token
-      
+
       console.log(`👋 Logout para: ${req.usuario.correo}`);
 
       res.json({
         success: true,
-        message: 'Sesión cerrada. Elimine el token del cliente.'
+        message: "Sesión cerrada. Elimine el token del cliente.",
       });
-
     } catch (error) {
-      console.error('❌ Error en logout:', error.message);
+      console.error("❌ Error en logout:", error.message);
 
       res.status(500).json({
         success: false,
         error: error.message,
-        message: 'Error en logout'
+        message: "Error en logout",
       });
     }
-  }
+  },
 };
 
 module.exports = authController;

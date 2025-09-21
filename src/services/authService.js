@@ -7,47 +7,56 @@ const authService = {
   /**
    * LOGIN - Autenticar usuario y generar JWT
    */
-  async login(correo, password) {
+  async login(loginInput, password) {
     try {
-      console.log("🔐 Intentando login para:", correo);
+      console.log("🔐 Intentando login para:", loginInput);
 
-      // 1. Buscar usuario por email (incluyendo contraseña)
+      // 1. Detectar si es correo o nombre de usuario
+      const esCorreo = loginInput.includes("@");
+
       const { supabase } = require("../config/database");
-      // En authService.js, método login, cambia la consulta SELECT por:
-      const { data: usuario, error } = await supabase
-        .from("usuario")
-        .select(
-          `
-    usuario_id,
-    nombre_usuario,
-    correo,
-    contraseña,
-    rol_id,
-    sucursal_id,
-    roles:rol_id (
-      rol_id,
-      nombre_rol,
-      descripcion
-    )
-  `
+
+      // 2. Buscar usuario por correo o nombre de usuario
+      let query = supabase.from("usuario").select(`
+        usuario_id,
+        nombre_usuario,
+        correo,
+        contraseña,
+        rol_id,
+        sucursal_id,
+        roles:rol_id (
+          rol_id,
+          nombre_rol,
+          descripcion
+        ),
+        sucursales:sucursal_id (
+          sucursal_id,
+          nombre_sucursal
         )
-        .eq("correo", correo)
-        .single();
+      `);
+
+      // Filtrar por correo o nombre_usuario según el input
+      if (esCorreo) {
+        query = query.eq("correo", loginInput);
+      } else {
+        query = query.eq("nombre_usuario", loginInput);
+      }
+
+      const { data: usuario, error } = await query.single();
 
       if (error || !usuario) {
         throw new Error("Credenciales inválidas");
       }
 
-      // 2. Verificar contraseña
+      // 3. Verificar contraseña
       const passwordValido = await bcrypt.compare(password, usuario.contraseña);
 
       if (!passwordValido) {
-        console.log("❌ Contraseña incorrecta para:", correo);
+        console.log("❌ Contraseña incorrecta para:", loginInput);
         throw new Error("Credenciales inválidas");
       }
 
-      // 3. Generar JWT token
-      // En el mismo método, actualiza el payload:
+      // 4. Generar JWT token
       const payload = {
         usuario_id: usuario.usuario_id,
         nombre_usuario: usuario.nombre_usuario,
@@ -55,6 +64,7 @@ const authService = {
         rol_id: usuario.rol_id,
         sucursal_id: usuario.sucursal_id,
         nombre_rol: usuario.roles.nombre_rol,
+        nombre_sucursal: usuario.sucursales.nombre_sucursal,
       };
 
       const token = jwt.sign(payload, process.env.JWT_SECRET, {
@@ -65,7 +75,7 @@ const authService = {
 
       console.log("✅ Login exitoso para:", usuario.nombre_usuario);
 
-      // 4. Retornar datos del usuario y token
+      // 5. Retornar datos del usuario y token
       return {
         token,
         usuario: {
@@ -73,7 +83,9 @@ const authService = {
           nombre_usuario: usuario.nombre_usuario,
           correo: usuario.correo,
           rol_id: usuario.rol_id,
+          sucursal_id: usuario.sucursal_id,
           rol: usuario.roles,
+          sucursal: usuario.sucursales,
         },
       };
     } catch (error) {

@@ -346,6 +346,61 @@ const facturaController = {
       });
     }
   },
+
+  /**
+   * GET /api/facturas/piloto/:piloto - Facturas asignadas a un piloto específico
+   */
+  async obtenerFacturasPiloto(req, res) {
+    try {
+      const { piloto } = req.params;
+
+      const facturas = await facturaService.obtenerFacturasAsignadas({
+        piloto: piloto,
+        estado_id: 1, // Solo pendientes
+      });
+
+      res.json({
+        success: true,
+        data: facturas,
+        message: `Facturas para piloto ${piloto}`,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error al obtener facturas del piloto",
+      });
+    }
+  },
+
+  /**
+   * GET /api/facturas/:numero_factura/guias-disponibles - Guías disponibles
+   */
+  async obtenerGuiasDisponibles(req, res) {
+    try {
+      const { numero_factura } = req.params;
+      const { piloto } = req.query;
+
+      // Llamar al servicio de integración
+      const integracionService = require("../services/integracionService");
+      const guias = await integracionService.buscarGuiasDisponibles(
+        numero_factura,
+        piloto
+      );
+
+      res.json({
+        success: true,
+        data: guias,
+        message: "Guías disponibles obtenidas",
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error al obtener guías disponibles",
+      });
+    }
+  },
 };
 
 module.exports = facturaController;
