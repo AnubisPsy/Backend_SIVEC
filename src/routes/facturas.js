@@ -105,4 +105,61 @@ router.get(
   facturaController.obtenerGuiasDisponibles
 );
 
+// POST /api/facturas/asignar
+router.post("/asignar", async (req, res) => {
+  try {
+    const { numero_vehiculo, piloto, facturas, notas } = req.body;
+
+    // Validar
+    if (!numero_vehiculo || !piloto || !facturas || facturas.length === 0) {
+      return res.status(400).json({
+        error: "Faltan datos requeridos",
+      });
+    }
+
+    // 1. Crear el viaje
+    const { data: viaje, error: viajeError } = await supabase
+      .from("viaje")
+      .insert({
+        numero_vehiculo,
+        piloto,
+        estado_viaje: "pendiente",
+      })
+      .select()
+      .single();
+
+    if (viajeError) throw viajeError;
+
+    // 2. Asignar facturas al viaje
+    const facturasData = facturas.map((factura) => ({
+      numero_factura: factura.numero_factura,
+      piloto,
+      numero_vehiculo,
+      fecha_asignacion: new Date().toISOString().split("T")[0],
+      estado_id: 1,
+      viaje_id: viaje.viaje_id,
+      notas_jefe: factura.notas || notas || null,
+    }));
+
+    const { data: facturasCreadas, error: facturasError } = await supabase
+      .from("factura_asignada")
+      .insert(facturasData)
+      .select();
+
+    if (facturasError) throw facturasError;
+
+    res.status(201).json({
+      success: true,
+      viaje_id: viaje.viaje_id,
+      facturas: facturasCreadas,
+    });
+  } catch (error) {
+    console.error("Error asignando facturas:", error);
+    res.status(500).json({
+      error: "Error interno del servidor",
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;

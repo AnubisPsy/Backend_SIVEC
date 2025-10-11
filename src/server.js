@@ -1,5 +1,6 @@
 // src/server.js
 require("dotenv").config();
+const { iniciarDeteccionAutomatica } = require("./services/integracionService");
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
@@ -7,9 +8,11 @@ const helmet = require("helmet");
 // Importar rutas
 const usuarioRoutes = require("./routes/usuarios");
 const authRoutes = require("./routes/auth");
-const facturaRoutes = require("./routes/facturas");
+const facturasRoutes = require("./routes/facturas");
 const vehiculoRoutes = require("./routes/vehiculos");
 const pilotoRoutes = require("./routes/pilotos");
+const viajesRoutes = require("./routes/viajes");
+const gpsRoutes = require("./routes/gps");
 
 // Importar configuración
 const { probarConexiones } = require("./config/database");
@@ -32,9 +35,11 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/auth", authRoutes);
-app.use("/api/facturas", facturaRoutes);
+app.use("/api/facturas", facturasRoutes);
 app.use("/api/vehiculos", vehiculoRoutes);
 app.use("/api/pilotos", pilotoRoutes);
+app.use("/api/viajes", viajesRoutes);
+app.use("/api/gps", gpsRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -80,6 +85,8 @@ app.use((req, res) => {
     message: `Ruta ${req.originalUrl} no encontrada`,
   });
 });
+
+iniciarDeteccionAutomatica();
 
 // ==========================================
 // INICIAR SERVIDOR

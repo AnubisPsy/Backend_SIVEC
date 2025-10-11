@@ -1,319 +1,194 @@
-// src/services/integracionService.js
+const { createClient } = require("@supabase/supabase-js");
 const sql = require("mssql");
-const { sqlConfig } = require("../config/database");
-const { supabase } = require("../config/database");
 
-const integracionService = {
-  /**
-   * BUSCAR GUÍA CORRECTA EN SISTEMA EXTERNO
-   */
-  async buscarGuiaCorrecta(numero_factura, piloto_asignado) {
-    let pool;
+const supabase = createClient(
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_KEY
+);
 
-    try {
-      console.log(
-        `🔍 Buscando guía para factura: ${numero_factura}, piloto: ${piloto_asignado}`
-      );
-
-      // Conectar a SQL Server
-      pool = await sql.connect(sqlConfig);
-
-      // Query con los criterios definidos
-      const query = `
-        SELECT TOP 1 
-          d.documento,
-          d.referencia,
-          d.piloto,
-          f.detalle_producto,
-          f.direccion,
-          d.created_at as fecha_creacion
-        FROM despachos d
-        INNER JOIN factura f ON d.documento = f.documento
-        WHERE d.documento = @numero_factura
-          AND d.estado IN (5, 6)  -- Estados válidos
-          AND d.piloto = @piloto  -- Mismo conductor
-          AND d.referencia IS NOT NULL
-        ORDER BY d.created_at DESC  -- Más reciente
-      `;
-
-      const result = await pool
-        .request()
-        .input("numero_factura", sql.VarChar(100), numero_factura)
-        .input("piloto", sql.VarChar(100), piloto_asignado)
-        .query(query);
-
-      if (result.recordset.length > 0) {
-        const guia = result.recordset[0];
-        console.log(`✅ Guía encontrada: ${guia.referencia}`);
-        return guia;
-      } else {
-        console.log(
-          `❌ No se encontró guía válida para factura ${numero_factura}`
-        );
-        return null;
-      }
-    } catch (error) {
-      console.error("❌ Error al buscar guía:", error);
-      throw new Error(`Error de integración: ${error.message}`);
-    } finally {
-      if (pool) {
-        await pool.close();
-      }
-    }
+const sqlConfig = {
+  server: process.env.SQL_SERVER_HOST || "localhost",
+  port: parseInt(process.env.SQL_SERVER_PORT) || 1433,
+  database: process.env.SQL_SERVER_DATABASE || "TestSIVEC",
+  user: process.env.SQL_SERVER_USER,
+  password: process.env.SQL_SERVER_PASSWORD,
+  options: {
+    encrypt: false,
+    trustServerCertificate: true,
+    enableArithAbort: true,
   },
-
-  /**
-   * PROCESAR FACTURA ASIGNADA - Buscar y crear guía si existe
-   */
-  async procesarFacturaAsignada(factura_id) {
-    try {
-      console.log(`🔄 Procesando factura_asignada ID: ${factura_id}`);
-
-      // 1. Obtener datos de la factura asignada
-      const { data: facturaAsignada, error: errorFactura } = await supabase
-        .from("factura_asignada")
-        .select("*")
-        .eq("factura_id", factura_id)
-        .eq("estado_id", 1) // Solo facturas asignadas (no procesadas)
-        .single();
-
-      if (errorFactura || !facturaAsignada) {
-        throw new Error("Factura asignada no encontrada o ya procesada");
-      }
-
-      // 2. Buscar guía en sistema externo
-      const guiaExterna = await this.buscarGuiaCorrecta(
-        facturaAsignada.numero_factura,
-        facturaAsignada.piloto
-      );
-
-      if (!guiaExterna) {
-        console.log(
-          `⏳ Guía aún no disponible para factura ${facturaAsignada.numero_factura}`
-        );
-        return {
-          procesada: false,
-          mensaje: "Guía no disponible aún",
-        };
-      }
-
-      // 3. Crear viaje si no existe
-      let viaje_id = facturaAsignada.viaje_id;
-
-      if (!viaje_id) {
-        viaje_id = await this.crearViaje(facturaAsignada, guiaExterna);
-      }
-
-      // 4. Crear guía de remisión en SIVEC
-      await this.crearGuiaRemision(guiaExterna, viaje_id);
-
-      // 5. Actualizar factura asignada
-      await this.actualizarFacturaAsignada(factura_id, viaje_id);
-
-      // 6. Log del proceso
-      await this.registrarDeteccion(
-        facturaAsignada.numero_factura,
-        guiaExterna.referencia,
-        "procesado_exitosamente"
-      );
-
-      console.log(
-        `✅ Factura ${facturaAsignada.numero_factura} procesada exitosamente`
-      );
-
-      return {
-        procesada: true,
-        numero_guia: guiaExterna.referencia,
-        viaje_id: viaje_id,
-      };
-    } catch (error) {
-      console.error("❌ Error al procesar factura:", error);
-
-      // Log del error
-      await this.registrarDeteccion(
-        "error",
-        "error",
-        "error_procesamiento",
-        error.message
-      );
-
-      throw error;
-    }
-  },
-
-  /**
-   * CREAR VIAJE AUTOMÁTICAMENTE
-   */
-  async crearViaje(facturaAsignada, guiaExterna) {
-    try {
-      const datosViaje = {
-        numero_guia: guiaExterna.referencia,
-        detalle_producto: guiaExterna.detalle_producto,
-        fecha_viaje: new Date().toISOString().split("T")[0], // Fecha actual
-        cliente: guiaExterna.cliente || "No especificado",
-        direccion: guiaExterna.direccion,
-        numero_vehiculo: facturaAsignada.numero_vehiculo,
-        piloto: facturaAsignada.piloto,
-        creado_automaticamente: true,
-      };
-
-      const { data: viaje, error } = await supabase
-        .from("viaje")
-        .insert(datosViaje)
-        .select("viaje_id")
-        .single();
-
-      if (error) {
-        throw new Error(`Error al crear viaje: ${error.message}`);
-      }
-
-      console.log(`✅ Viaje creado automáticamente: ${viaje.viaje_id}`);
-      return viaje.viaje_id;
-    } catch (error) {
-      console.error("❌ Error al crear viaje:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * CREAR GUÍA DE REMISIÓN EN SIVEC
-   */
-  async crearGuiaRemision(guiaExterna, viaje_id) {
-    try {
-      const datosGuia = {
-        numero_guia: guiaExterna.referencia,
-        numero_factura: guiaExterna.documento,
-        detalle_producto: guiaExterna.detalle_producto,
-        fecha_emision: new Date().toISOString().split("T")[0],
-        cliente: guiaExterna.cliente || "No especificado",
-        direccion: guiaExterna.direccion,
-        piloto: guiaExterna.piloto,
-        estado_id: 3, // guia_asignada
-        viaje_id: viaje_id,
-      };
-
-      const { data: guia, error } = await supabase
-        .from("guia_remision")
-        .insert(datosGuia)
-        .select("guia_id")
-        .single();
-
-      if (error) {
-        throw new Error(`Error al crear guía de remisión: ${error.message}`);
-      }
-
-      console.log(`✅ Guía de remisión creada: ${guia.guia_id}`);
-      return guia.guia_id;
-    } catch (error) {
-      console.error("❌ Error al crear guía de remisión:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * ACTUALIZAR FACTURA ASIGNADA
-   */
-  async actualizarFacturaAsignada(factura_id, viaje_id) {
-    try {
-      const { error } = await supabase
-        .from("factura_asignada")
-        .update({
-          estado_id: 2, // factura_despachada
-          viaje_id: viaje_id,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("factura_id", factura_id);
-
-      if (error) {
-        throw new Error(
-          `Error al actualizar factura asignada: ${error.message}`
-        );
-      }
-
-      console.log(`✅ Factura asignada actualizada a estado despachada`);
-    } catch (error) {
-      console.error("❌ Error al actualizar factura asignada:", error);
-      throw error;
-    }
-  },
-
-  /**
-   * REGISTRAR LOG DE DETECCIÓN
-   */
-  async registrarDeteccion(numero_factura, numero_guia, accion, detalles = "") {
-    try {
-      await supabase.from("log_detecciones").insert({
-        numero_factura,
-        numero_guia,
-        accion,
-        detalles,
-        fecha_deteccion: new Date().toISOString(),
-      });
-    } catch (error) {
-      console.error("❌ Error al registrar log:", error);
-      // No lanzar error aquí para no interrumpir el proceso principal
-    }
-  },
-
-  /**
-   * PROCESAR TODAS LAS FACTURAS PENDIENTES
-   */
-  async procesarFacturasPendientes() {
-    try {
-      console.log("🔄 Iniciando procesamiento de facturas pendientes...");
-
-      // Obtener todas las facturas asignadas pendientes
-      const { data: facturasPendientes, error } = await supabase
-        .from("factura_asignada")
-        .select("factura_id, numero_factura")
-        .eq("estado_id", 1); // Solo asignadas
-
-      if (error) {
-        throw new Error(
-          `Error al obtener facturas pendientes: ${error.message}`
-        );
-      }
-
-      console.log(
-        `📋 ${facturasPendientes.length} facturas pendientes encontradas`
-      );
-
-      let procesadas = 0;
-      let errores = 0;
-
-      // Procesar cada factura
-      for (const factura of facturasPendientes) {
-        try {
-          const resultado = await this.procesarFacturaAsignada(
-            factura.factura_id
-          );
-
-          if (resultado.procesada) {
-            procesadas++;
-          }
-        } catch (error) {
-          console.error(
-            `❌ Error procesando factura ${factura.numero_factura}:`,
-            error.message
-          );
-          errores++;
-        }
-      }
-
-      console.log(
-        `✅ Procesamiento completado: ${procesadas} procesadas, ${errores} errores`
-      );
-
-      return {
-        total: facturasPendientes.length,
-        procesadas,
-        errores,
-      };
-    } catch (error) {
-      console.error("❌ Error en procesamiento masivo:", error);
-      throw error;
-    }
+  pool: {
+    max: 10,
+    min: 0,
+    idleTimeoutMillis: 30000,
   },
 };
 
-module.exports = integracionService;
+// Pool global para reutilizar conexiones
+let pool = null;
+
+async function getPool() {
+  if (!pool || !pool.connected) {
+    pool = await sql.connect(sqlConfig);
+  }
+  return pool;
+}
+
+async function detectarYCrearGuias() {
+  console.log("🔍 Iniciando detección de guías...");
+
+  try {
+    // 1. Obtener facturas asignadas que tienen viaje
+    const { data: facturasAsignadas, error: facturaError } = await supabase
+      .from("factura_asignada")
+      .select("numero_factura, viaje_id, piloto")
+      .not("viaje_id", "is", null)
+      .eq("estado_id", 1);
+
+    if (facturaError) throw facturaError;
+
+    if (!facturasAsignadas || facturasAsignadas.length === 0) {
+      console.log("ℹ️  No hay facturas pendientes de procesar");
+      return { processed: 0, created: 0 };
+    }
+
+    console.log(
+      `📋 Encontradas ${facturasAsignadas.length} facturas para verificar`
+    );
+
+    // 2. Obtener pool de conexiones (reutilizable)
+    const currentPool = await getPool();
+
+    let guiasCreadas = 0;
+
+    for (const factura of facturasAsignadas) {
+      try {
+        // 3. Buscar guías en SQL Server para esta factura
+        const query = `
+          SELECT 
+            d.referencia AS numero_guia,
+            d.documento AS numero_factura,
+            f.detalle_producto,
+            d.fecha_emision,
+            f.direccion,
+            d.piloto
+          FROM despachos d
+          JOIN factura f ON d.documento = f.documento
+          WHERE f.estado = 8 
+            AND d.referencia IS NOT NULL
+            AND d.documento = @numeroFactura
+        `;
+
+        const result = await currentPool
+          .request()
+          .input("numeroFactura", sql.VarChar, factura.numero_factura)
+          .query(query);
+
+        if (result.recordset.length === 0) {
+          continue;
+        }
+
+        console.log(
+          `📦 Encontradas ${result.recordset.length} guías para ${factura.numero_factura}`
+        );
+
+        // 4. Crear guías en Supabase
+        for (const guia of result.recordset) {
+          const { data: existe } = await supabase
+            .from("guia_remision")
+            .select("guia_id")
+            .eq("numero_guia", guia.numero_guia)
+            .single();
+
+          if (!existe) {
+            const { error: guiaError } = await supabase
+              .from("guia_remision")
+              .insert({
+                numero_guia: guia.numero_guia,
+                numero_factura: guia.numero_factura,
+                detalle_producto: guia.detalle_producto,
+                fecha_emision: guia.fecha_emision,
+                cliente: "Cliente desde sistema externo",
+                direccion: guia.direccion,
+                piloto: guia.piloto,
+                estado_id: 3,
+                viaje_id: factura.viaje_id,
+              });
+
+            if (guiaError) {
+              console.error("❌ Error creando guía:", guiaError);
+              continue;
+            }
+
+            await supabase.from("log_detecciones").insert({
+              numero_factura: guia.numero_factura,
+              numero_guia: guia.numero_guia,
+              accion: "guia_detectada",
+              detalles: `Guía detectada automáticamente desde sistema externo`,
+            });
+
+            guiasCreadas++;
+            console.log(`✅ Guía ${guia.numero_guia} creada`);
+          }
+        }
+
+        // 5. Actualizar estado de factura
+        if (result.recordset.length > 0) {
+          await supabase
+            .from("factura_asignada")
+            .update({ estado_id: 2 })
+            .eq("numero_factura", factura.numero_factura);
+        }
+      } catch (facturaError) {
+        console.error(
+          `❌ Error procesando factura ${factura.numero_factura}:`,
+          facturaError.message
+        );
+      }
+    }
+
+    console.log(`✅ Detección completada. Guías creadas: ${guiasCreadas}`);
+    return {
+      processed: facturasAsignadas.length,
+      created: guiasCreadas,
+    };
+  } catch (error) {
+    console.error("❌ Error en detección:", error.message);
+    // No lanzar error para que no crashee el servidor
+    return { processed: 0, created: 0, error: error.message };
+  }
+}
+
+let detectionInterval;
+
+function iniciarDeteccionAutomatica() {
+  console.log("🚀 Iniciando servicio de detección automática...");
+
+  // Ejecutar después de 10 segundos (dar tiempo al servidor)
+  setTimeout(() => {
+    detectarYCrearGuias();
+  }, 10000);
+
+  // Ejecutar cada 5 minutos
+  detectionInterval = setInterval(() => {
+    detectarYCrearGuias().catch((err) => {
+      console.error("❌ Error en detección automática:", err.message);
+    });
+  }, 5 * 60 * 1000);
+}
+
+function detenerDeteccionAutomatica() {
+  if (detectionInterval) {
+    clearInterval(detectionInterval);
+    console.log("⏸️  Servicio de detección detenido");
+  }
+  if (pool) {
+    pool.close();
+  }
+}
+
+module.exports = {
+  detectarYCrearGuias,
+  iniciarDeteccionAutomatica,
+  detenerDeteccionAutomatica,
+};
