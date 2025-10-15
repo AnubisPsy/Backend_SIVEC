@@ -90,11 +90,55 @@ router.delete("/:id", verificarAuth, soloJefes, facturaController.eliminar);
 /**
  * GET /api/facturas/piloto/:piloto - Facturas de un piloto específico
  */
-router.get(
-  "/piloto/:piloto",
-  verificarAuth,
-  facturaController.obtenerFacturasPiloto
-);
+// GET /api/facturas/piloto/:piloto_id/con-guias
+router.get("/piloto/:piloto_id/con-guias", async (req, res) => {
+  try {
+    const { piloto_id } = req.params; // ✨ Ahora recibe piloto_id
+
+    // Obtener facturas del piloto por ID
+    const { data: facturas, error: errorFacturas } = await supabase
+      .from("factura_asignada")
+      .select("*")
+      .eq("piloto_id", piloto_id) // ✨ Filtrar por piloto_id
+      .eq("estado_id", 1)
+      .order("created_at", { ascending: false });
+
+    if (errorFacturas) throw errorFacturas;
+
+    // Para cada factura, buscar su guía
+    const facturasConGuias = await Promise.all(
+      facturas.map(async (factura) => {
+        const { data: guia } = await supabase
+          .from("guia_remision")
+          .select(
+            `
+            *,
+            estados (codigo, nombre)
+          `
+          )
+          .eq("factura_id", factura.factura_id)
+          .single();
+
+        return {
+          ...factura,
+          guia: guia || null,
+        };
+      })
+    );
+
+    res.json({
+      success: true,
+      data: facturasConGuias,
+    });
+  } catch (error) {
+    console.error("Error obteniendo facturas con guías:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener facturas",
+      error: error.message,
+    });
+  }
+});
 
 /**
  * GET /api/facturas/:numero_factura/guias-disponibles - Guías disponibles
