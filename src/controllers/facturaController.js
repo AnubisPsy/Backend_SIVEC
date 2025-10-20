@@ -295,19 +295,17 @@ const facturaController = {
   /**
    * GET /api/facturas/form-data - Datos para formulario de asignar factura
    */
+  /**
+   * GET /api/facturas/form-data - Datos para formulario de asignar factura
+   */
   async obtenerDatosFormulario(req, res) {
     try {
-      console.log(
-        `📋 Obteniendo datos para formulario - Usuario: ${req.usuario.nombre_usuario}`
-      );
-      console.log("👤 Datos completos del usuario:", req.usuario); // <- AGREGAR ESTA LÍNEA
-
-      // Obtener pilotos desde SQL Server (sin restricciones)
-      const pilotos = await pilotoService.obtenerTodosPilotos();
+      console.log("📋 Obteniendo datos para formulario");
+      console.log("👤 Usuario:", req.usuario); // Debug
 
       // Verificar que el usuario tenga sucursal_id
       if (!req.usuario.sucursal_id) {
-        console.log("⚠️ Usuario sin sucursal_id asignada");
+        console.log("⚠️ Usuario sin sucursal_id:", req.usuario);
         return res.status(400).json({
           success: false,
           error: "Usuario sin sucursal asignada",
@@ -316,14 +314,19 @@ const facturaController = {
         });
       }
 
+      // Obtener pilotos desde SQL Server (sin filtro de sucursal)
+      console.log("🔍 Obteniendo pilotos desde SQL Server...");
+      const pilotos = await pilotoService.obtenerTodosPilotos();
+      console.log(`✅ ${pilotos.length} pilotos obtenidos`);
+
       // Obtener vehículos desde Supabase (filtrados por sucursal del usuario)
+      console.log(
+        `🔍 Obteniendo vehículos de sucursal ${req.usuario.sucursal_id}...`
+      );
       const vehiculos = await vehiculoService.obtenerVehiculosPorSucursal(
         req.usuario.sucursal_id
       );
-
-      console.log(
-        `✅ Datos obtenidos: ${pilotos.length} pilotos, ${vehiculos.length} vehículos`
-      );
+      console.log(`✅ ${vehiculos.length} vehículos obtenidos`);
 
       res.json({
         success: true,
@@ -335,10 +338,8 @@ const facturaController = {
         message: "Datos para formulario obtenidos exitosamente",
       });
     } catch (error) {
-      console.error(
-        "❌ Error al obtener datos para formulario:",
-        error.message
-      );
+      console.error("❌ Error al obtener datos para formulario:", error);
+      console.error("Stack:", error.stack);
       res.status(500).json({
         success: false,
         error: error.message,

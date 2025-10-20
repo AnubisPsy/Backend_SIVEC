@@ -20,7 +20,7 @@ const pilotoService = {
       const query = `
         SELECT 
           nombre as nombre_piloto
-        FROM piloto 
+        FROM pilotos 
         WHERE activo = 1
         ORDER BY nombre
       `;
@@ -61,7 +61,7 @@ const pilotoService = {
       const query = `
         SELECT 
           nombre as nombre_piloto
-        FROM piloto 
+        FROM pilotos 
         WHERE nombre = @nombre_piloto AND activo = 1
       `;
 
@@ -102,7 +102,7 @@ const pilotoService = {
       let query = `
         SELECT 
           nombre as nombre_piloto
-        FROM piloto 
+        FROM pilotos 
         WHERE activo = 1
       `;
 
@@ -172,7 +172,7 @@ const pilotoService = {
           COUNT(*) as total_pilotos,
           COUNT(CASE WHEN activo = 1 THEN 1 END) as pilotos_activos,
           COUNT(CASE WHEN activo = 0 THEN 1 END) as pilotos_inactivos
-        FROM piloto
+        FROM pilotos
       `;
 
       const result = await pool.request().query(query);

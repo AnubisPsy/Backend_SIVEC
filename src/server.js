@@ -13,6 +13,7 @@ const vehiculoRoutes = require("./routes/vehiculos");
 const pilotoRoutes = require("./routes/pilotos");
 const viajesRoutes = require("./routes/viajes");
 const gpsRoutes = require("./routes/gps");
+const sucursalesRoutes = require("./routes/sucursales");
 
 // Importar configuración
 const { probarConexiones } = require("./config/database");
@@ -40,6 +41,7 @@ app.use("/api/vehiculos", vehiculoRoutes);
 app.use("/api/pilotos", pilotoRoutes);
 app.use("/api/viajes", viajesRoutes);
 app.use("/api/gps", gpsRoutes);
+app.use("/api/sucursales", sucursalesRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
