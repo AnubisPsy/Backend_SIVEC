@@ -301,7 +301,7 @@ const facturaController = {
   async obtenerDatosFormulario(req, res) {
     try {
       console.log("📋 Obteniendo datos para formulario");
-      console.log("👤 Usuario:", req.usuario); // Debug
+      console.log("👤 Usuario:", req.usuario);
 
       // Verificar que el usuario tenga sucursal_id
       if (!req.usuario.sucursal_id) {
@@ -314,10 +314,26 @@ const facturaController = {
         });
       }
 
-      // Obtener pilotos desde SQL Server (sin filtro de sucursal)
-      console.log("🔍 Obteniendo pilotos desde SQL Server...");
-      const pilotos = await pilotoService.obtenerTodosPilotos();
-      console.log(`✅ ${pilotos.length} pilotos obtenidos`);
+      // ✨ CAMBIO: Obtener pilotos del nuevo endpoint que mezcla SQL + Supabase
+      console.log("🔍 Obteniendo pilotos (SQL + Temporales)...");
+      const axios = require("axios");
+      const token = req.headers.authorization;
+
+      const pilotosResponse = await axios.get(
+        "http://localhost:3000/api/pilotos",
+        {
+          headers: { Authorization: token },
+        }
+      );
+
+      const pilotos = pilotosResponse.data.data.map((p) => ({
+        nombre_piloto: p.nombre_piloto,
+        es_temporal: p.es_temporal,
+      }));
+
+      console.log(
+        `✅ ${pilotos.length} pilotos obtenidos (SQL: ${pilotosResponse.data.fuentes.sql}, Temporales: ${pilotosResponse.data.fuentes.temporales})`
+      );
 
       // Obtener vehículos desde Supabase (filtrados por sucursal del usuario)
       console.log(

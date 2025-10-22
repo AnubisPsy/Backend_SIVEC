@@ -1,5 +1,6 @@
 // src/controllers/pilotoController.js
 const pilotoService = require("../services/pilotoService");
+const { supabase } = require("../config/database");
 
 const pilotoController = {
   /**
@@ -7,16 +8,52 @@ const pilotoController = {
    */
   async obtenerTodos(req, res) {
     try {
-      console.log("👨‍✈️ Obteniendo lista de pilotos");
+      console.log("👨‍✈️ Obteniendo pilotos de ambas fuentes...");
 
-      const pilotos = await pilotoService.obtenerTodosPilotos();
+      // 1. Obtener pilotos de SQL Server
+      const pilotosSQL = await pilotoService.obtenerTodosPilotos();
+      console.log(`📋 ${pilotosSQL.length} pilotos desde SQL Server`);
 
-      console.log(`📋 ${pilotos.length} pilotos disponibles`);
+      // 2. Obtener pilotos temporales activos de Supabase
+      const { data: pilotosTemporales, error } = await supabase
+        .from("piloto_temporal")
+        .select("piloto_temporal_id, nombre")
+        .eq("activo", true)
+        .order("nombre");
+
+      if (error) {
+        console.error("❌ Error obteniendo temporales:", error);
+      }
+
+      console.log(
+        `📋 ${pilotosTemporales?.length || 0} pilotos temporales activos`
+      );
+
+      // 3. Combinar ambas listas
+      const pilotosCombinados = [
+        ...pilotosSQL.map((p) => ({
+          nombre_piloto: p.nombre_piloto,
+          es_temporal: false,
+          fuente: "sql",
+        })),
+        ...(pilotosTemporales || []).map((p) => ({
+          nombre_piloto: p.nombre,
+          es_temporal: true,
+          piloto_temporal_id: p.piloto_temporal_id,
+          fuente: "supabase",
+        })),
+      ].sort((a, b) => a.nombre_piloto.localeCompare(b.nombre_piloto));
+
+      console.log(`✅ Total pilotos combinados: ${pilotosCombinados.length}`);
 
       res.json({
         success: true,
-        data: pilotos,
-        total: pilotos.length,
+        data: pilotosCombinados,
+        total: pilotosCombinados.length,
+        fuentes: {
+          sql: pilotosSQL.length,
+          temporales: pilotosTemporales?.length || 0,
+        },
         message: "Pilotos obtenidos exitosamente",
       });
     } catch (error) {
@@ -25,7 +62,7 @@ const pilotoController = {
       res.status(500).json({
         success: false,
         error: error.message,
-        message: "Error al consultar sistema externo de pilotos",
+        message: "Error al consultar pilotos",
       });
     }
   },
