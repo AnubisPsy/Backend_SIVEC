@@ -25,14 +25,13 @@ router.get("/", async (req, res) => {
         viaje_id,
         numero_vehiculo,
         piloto,
-        timestamp_salida,
-        timestamp_regreso,
+        fecha_viaje,
         estado_viaje,
         created_at
       `);
 
     if (estado === "activo") {
-      query = query.in("estado_viaje", ["pendiente", "en_curso"]);
+      query = query.in("estado_viaje", [7, 8]);
     } else if (estado) {
       query = query.eq("estado_viaje", estado);
     }

@@ -9,12 +9,16 @@ const facturaController = {
    */
   async asignar(req, res) {
     try {
-      console.log("📋 Asignando factura:", {
-        numero_factura: req.body.numero_factura,
-        piloto: req.body.piloto,
-        numero_vehiculo: req.body.numero_vehiculo,
-        usuario: req.usuario.nombre_usuario,
-      });
+      console.log("🎯 =====================================");
+      console.log("📋 facturaController.asignar LLAMADO");
+      console.log("📦 req.body:", JSON.stringify(req.body, null, 2));
+      console.log(
+        "👤 Usuario:",
+        req.usuario?.nombre_usuario,
+        "- Rol:",
+        req.usuario?.rol_id
+      );
+      console.log("🎯 =====================================");
 
       const facturaAsignada = await facturaService.asignarFactura(req.body);
 
@@ -27,8 +31,9 @@ const facturaController = {
       });
     } catch (error) {
       console.error("❌ Error al asignar factura:", error.message);
+      console.error("Stack:", error.stack);
 
-      res.status(400).json({
+      res.status(500).json({
         success: false,
         error: error.message,
         message: "Error al asignar factura",

@@ -15,6 +15,7 @@ const viajesRoutes = require("./routes/viajes");
 const gpsRoutes = require("./routes/gps");
 const sucursalesRoutes = require("./routes/sucursales");
 const pilotosTemporalesRoutes = require("./routes/pilotos-temporales");
+const guiasRoutes = require("./routes/guias");
 
 // Importar configuración
 const { probarConexiones } = require("./config/database");
@@ -44,6 +45,7 @@ app.use("/api/viajes", viajesRoutes);
 app.use("/api/gps", gpsRoutes);
 app.use("/api/sucursales", sucursalesRoutes);
 app.use("/api/pilotos-temporales", pilotosTemporalesRoutes);
+app.use("/api/guias", guiasRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
