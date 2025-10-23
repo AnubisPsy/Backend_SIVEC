@@ -365,4 +365,123 @@ router.get(
   }
 );
 
+// GET /api/facturas/piloto/:piloto_id/con-guias-vinculadas
+router.get(
+  "/piloto/:piloto_id/con-guias-vinculadas",
+  verificarAuth,
+  async (req, res) => {
+    try {
+      const { piloto_id } = req.params;
+
+      console.log(
+        `🔍 Obteniendo facturas con guías vinculadas para usuario: ${piloto_id}`
+      );
+
+      // 1. Obtener usuario y su vinculación
+      const { data: usuario, error: errorUsuario } = await supabase
+        .from("usuario")
+        .select("piloto_sql_id, piloto_temporal_id, nombre_usuario")
+        .eq("usuario_id", piloto_id)
+        .single();
+
+      if (errorUsuario) throw errorUsuario;
+
+      let nombrePiloto = null;
+
+      if (usuario.piloto_temporal_id) {
+        const { data: pilotoTemp } = await supabase
+          .from("piloto_temporal")
+          .select("nombre")
+          .eq("piloto_temporal_id", usuario.piloto_temporal_id)
+          .single();
+
+        if (pilotoTemp) nombrePiloto = pilotoTemp.nombre;
+      } else if (usuario.piloto_sql_id) {
+        const sql = require("mssql");
+        const { sqlConfig } = require("../config/database");
+        const pool = await sql.connect(sqlConfig);
+
+        const result = await pool
+          .request()
+          .input("piloto_id", sql.Int, usuario.piloto_sql_id)
+          .query("SELECT nombre FROM pilotos WHERE piloto_id = @piloto_id");
+
+        await pool.close();
+
+        if (result.recordset.length > 0) {
+          nombrePiloto = result.recordset[0].nombre;
+        }
+      }
+
+      if (!nombrePiloto) {
+        nombrePiloto = usuario.nombre_usuario;
+      }
+
+      console.log(`👤 Nombre del piloto: ${nombrePiloto}`);
+
+      // 2. Obtener facturas asignadas (solo pendientes)
+      const { data: facturas, error: errorFacturas } = await supabase
+        .from("factura_asignada")
+        .select("*")
+        .or(`piloto.eq.${nombrePiloto},piloto.eq.${usuario.nombre_usuario}`)
+        .eq("estado_id", 1)
+        .order("created_at", { ascending: false });
+
+      if (errorFacturas) throw errorFacturas;
+
+      // 3. Para cada factura, obtener guías VINCULADAS de Supabase
+      const facturasConGuias = await Promise.all(
+        facturas.map(async (factura) => {
+          const { data: guias } = await supabase
+            .from("guia_remision")
+            .select(
+              `
+              guia_id,
+              numero_guia,
+              numero_factura,
+              detalle_producto,
+              direccion,
+              estado_id,
+              fecha_emision,
+              fecha_entrega,
+              estados:estado_id (
+                codigo,
+                nombre
+              )
+            `
+            )
+            .eq("numero_factura", factura.numero_factura)
+            .order("created_at", { ascending: false });
+
+          return {
+            ...factura,
+            guias_vinculadas: guias || [],
+            total_guias: guias?.length || 0,
+            guias_pendientes:
+              guias?.filter((g) => g.estado_id === 3).length || 0,
+            guias_entregadas:
+              guias?.filter((g) => g.estado_id === 4).length || 0,
+          };
+        })
+      );
+
+      console.log(
+        `✅ ${facturasConGuias.length} facturas con guías vinculadas`
+      );
+
+      res.json({
+        success: true,
+        data: facturasConGuias,
+        message: "Facturas con guías vinculadas obtenidas",
+      });
+    } catch (error) {
+      console.error("❌ Error:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  }
+);
+
 module.exports = router;

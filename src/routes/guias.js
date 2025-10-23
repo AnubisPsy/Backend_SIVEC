@@ -11,88 +11,10 @@ const supabase = createClient(
 // Todas las rutas requieren autenticación
 router.use(verificarAuth);
 
-// POST /api/guias - Crear guía (vincular a factura)
-router.post("/", async (req, res) => {
-  try {
-    const {
-      numero_guia,
-      numero_factura,
-      detalle_producto,
-      direccion,
-      cliente,
-      fecha_emision,
-      viaje_id,
-    } = req.body;
-
-    console.log("📝 Creando guía:", {
-      numero_guia,
-      numero_factura,
-      usuario: req.usuario.nombre_usuario,
-    });
-
-    // Validaciones
-    if (!numero_guia || !numero_factura) {
-      return res.status(400).json({
-        success: false,
-        error: "numero_guia y numero_factura son requeridos",
-      });
-    }
-
-    // Verificar que la guía no exista ya
-    const { data: guiaExistente } = await supabase
-      .from("guia_remision")
-      .select("guia_id")
-      .eq("numero_guia", numero_guia)
-      .single();
-
-    if (guiaExistente) {
-      return res.status(400).json({
-        success: false,
-        error: "Esta guía ya fue vinculada anteriormente",
-      });
-    }
-
-    // Crear guía en Supabase
-    const { data, error } = await supabase
-      .from("guia_remision")
-      .insert({
-        numero_guia,
-        numero_factura,
-        detalle_producto: detalle_producto || "Sin descripción",
-        direccion: direccion || "Sin dirección",
-        cliente: cliente || "Cliente",
-        fecha_emision: fecha_emision || new Date().toISOString(),
-        estado_id: 3, // guia_asignada
-        viaje_id: viaje_id || null,
-      })
-      .select(
-        `
-        *,
-        estados:estado_id (
-          codigo,
-          nombre
-        )
-      `
-      )
-      .single();
-
-    if (error) throw error;
-
-    console.log(`✅ Guía creada: ${data.numero_guia} (ID: ${data.guia_id})`);
-
-    res.status(201).json({
-      success: true,
-      data: data,
-      message: "Guía vinculada exitosamente",
-    });
-  } catch (error) {
-    console.error("❌ Error creando guía:", error);
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      message: "Error al crear guía",
-    });
-  }
+router.use((req, res, next) => {
+  console.log(`🎯 POST /api/guias - ${req.method} ${req.url}`);
+  console.log("📦 Body:", req.body);
+  next();
 });
 
 // PATCH /api/guias/:id/estado - Actualizar estado de guía
@@ -251,7 +173,6 @@ router.post("/", async (req, res) => {
       numero_factura,
       detalle_producto,
       direccion,
-      cliente,
       fecha_emision,
     } = req.body;
 
@@ -283,6 +204,8 @@ router.post("/", async (req, res) => {
       });
     }
 
+    console.log("🔍 Buscando factura:", numero_factura);
+
     // 1️⃣ Obtener el viaje_id de la factura
     const { data: factura, error: errorFactura } = await supabase
       .from("factura_asignada")
@@ -290,7 +213,11 @@ router.post("/", async (req, res) => {
       .eq("numero_factura", numero_factura)
       .single();
 
+    console.log("📦 Factura encontrada:", factura);
+    console.log("❌ Error factura:", errorFactura);
+
     if (errorFactura || !factura) {
+      console.log("❌ No se encontró la factura");
       return res.status(404).json({
         success: false,
         error: "No se encontró la factura asignada",
@@ -299,12 +226,18 @@ router.post("/", async (req, res) => {
 
     const viaje_id = factura.viaje_id;
 
+    console.log("🔗 viaje_id extraído:", viaje_id);
+    console.log("🔗 Tipo de viaje_id:", typeof viaje_id);
+
     if (!viaje_id) {
+      console.log("❌ viaje_id es null/undefined");
       return res.status(400).json({
         success: false,
         error: "La factura no tiene un viaje asociado",
       });
     }
+
+    console.log("✅ Continuando con viaje_id:", viaje_id);
 
     // 2️⃣ Crear guía en Supabase
     const { data, error } = await supabase
@@ -314,7 +247,6 @@ router.post("/", async (req, res) => {
         numero_factura,
         detalle_producto: detalle_producto || "Sin descripción",
         direccion: direccion || "Sin dirección",
-        cliente: cliente || "Cliente",
         fecha_emision: fecha_emision || new Date().toISOString(),
         estado_id: 3, // guia_asignada
         viaje_id: viaje_id, // ← Vincular con el viaje
@@ -334,24 +266,19 @@ router.post("/", async (req, res) => {
 
     console.log(`✅ Guía creada: ${data.numero_guia} (ID: ${data.guia_id})`);
 
-    // 3️⃣ ACTUALIZAR EL VIAJE con la información de la guía
+    /// 3️⃣ ACTUALIZAR EL VIAJE - Solo cambiar estado
     const { error: errorViaje } = await supabase
       .from("viaje")
       .update({
-        numero_guia: numero_guia,
-        cliente: cliente || "Cliente",
-        detalle_producto: detalle_producto || "Sin descripción",
-        direccion: direccion || "Sin dirección",
-        estado_viaje: 8, // Actualizar estado del viaje
+        estado_viaje: 8, // En proceso
         updated_at: new Date().toISOString(),
       })
       .eq("viaje_id", viaje_id);
 
     if (errorViaje) {
       console.error("⚠️ Error actualizando viaje:", errorViaje);
-      // No fallar la operación, solo log
     } else {
-      console.log(`✅ Viaje actualizado: ${viaje_id}`);
+      console.log(`✅ Viaje actualizado a estado 8 (En proceso): ${viaje_id}`);
     }
 
     res.status(201).json({

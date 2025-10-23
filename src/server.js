@@ -38,6 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 // API Routes
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/auth", authRoutes);
+app.use("/api/guias", guiasRoutes);
 app.use("/api/facturas", facturasRoutes);
 app.use("/api/vehiculos", vehiculoRoutes);
 app.use("/api/pilotos", pilotoRoutes);
@@ -45,7 +46,6 @@ app.use("/api/viajes", viajesRoutes);
 app.use("/api/gps", gpsRoutes);
 app.use("/api/sucursales", sucursalesRoutes);
 app.use("/api/pilotos-temporales", pilotosTemporalesRoutes);
-app.use("/api/guias", guiasRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
