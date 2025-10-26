@@ -9,16 +9,28 @@ const vehiculoController = {
     try {
       const filtros = {};
 
-      // Filtro por sucursal del usuario autenticado (automático)
-      if (req.usuario?.sucursal_id) {
-        filtros.sucursal_id = req.usuario.sucursal_id;
-      }
-
-      // Permitir override solo para admins
-      if (req.query.sucursal_id && req.usuario?.rol_id === 3) {
+      // ✅ LÓGICA CORREGIDA
+      // 1. Si hay query param sucursal_id, usarlo (para filtros de reportes)
+      if (req.query.sucursal_id) {
         filtros.sucursal_id = parseInt(req.query.sucursal_id);
+        console.log(
+          `🔍 Filtrando por sucursal especificada: ${filtros.sucursal_id}`
+        );
+      }
+      // 2. Si NO hay query param y el usuario NO es admin, usar su sucursal
+      else if (req.usuario?.rol_id !== 3 && req.usuario?.sucursal_id) {
+        filtros.sucursal_id = req.usuario.sucursal_id;
+        console.log(
+          `🔒 Filtrando por sucursal del usuario: ${filtros.sucursal_id}`
+        );
+      }
+      // 3. Si es admin y NO especifica sucursal, mostrar TODOS
+      else if (req.usuario?.rol_id === 3) {
+        console.log(`🌐 Admin sin filtro: mostrando TODOS los vehículos`);
+        // No agregar filtro de sucursal
       }
 
+      // Filtro de agrupación (opcional)
       if (req.query.agrupacion) {
         filtros.agrupacion = req.query.agrupacion;
       }

@@ -19,6 +19,7 @@ const pilotoService = {
       // Query para obtener pilotos activos
       const query = `
         SELECT 
+          piloto_id,
           nombre as nombre_piloto
         FROM pilotos 
         WHERE activo = 1
@@ -28,6 +29,7 @@ const pilotoService = {
       const result = await pool.request().query(query);
 
       const pilotos = result.recordset.map((row) => ({
+        piloto_id: row.piloto_id,
         nombre_piloto: row.nombre_piloto,
       }));
 

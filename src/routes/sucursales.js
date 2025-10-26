@@ -1,38 +1,22 @@
+// src/routes/sucursales.js
 const express = require("express");
 const router = express.Router();
-const { createClient } = require("@supabase/supabase-js");
+const sucursalController = require("../controllers/sucursalController");
 const { verificarAuth } = require("../middleware/auth");
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_KEY
-);
 
 // Aplicar autenticación a todas las rutas
 router.use(verificarAuth);
 
-// GET /api/sucursales - Obtener todas las sucursales
-router.get("/", async (req, res) => {
-  try {
-    const { data: sucursales, error } = await supabase
-      .from("sucursales")
-      .select("*")
-      .order("nombre_sucursal", { ascending: true });
+/**
+ * GET /api/sucursales - Obtener todas las sucursales
+ * Headers: Authorization: Bearer <token>
+ */
+router.get("/", sucursalController.obtenerTodas);
 
-    if (error) throw error;
-
-    res.json({
-      success: true,
-      data: sucursales,
-    });
-  } catch (error) {
-    console.error("Error obteniendo sucursales:", error);
-    res.status(500).json({
-      success: false,
-      error: "Error interno del servidor",
-      details: error.message,
-    });
-  }
-});
+/**
+ * GET /api/sucursales/:id - Obtener sucursal por ID
+ * Headers: Authorization: Bearer <token>
+ */
+router.get("/:id", sucursalController.obtenerPorId);
 
 module.exports = router;

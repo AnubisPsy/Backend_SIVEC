@@ -1,119 +1,109 @@
 // src/services/pilotoTemporalService.js
-const bcrypt = require("bcrypt");
 const { supabase } = require("../config/database");
 
 const pilotoTemporalService = {
   /**
-   * Crear usuario temporal automáticamente
+   * Obtener todos los pilotos temporales
    */
-  async crearPilotoTemporal(nombreCompleto, sucursal_id, creado_por) {
-    try {
-      // Generar nombre de usuario único
-      const nombreBase = nombreCompleto
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "") // Quitar acentos
-        .split(" ")
-        .slice(0, 2) // Primeros dos nombres
-        .join("_");
+  async obtenerTodos() {
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .select("*")
+      .order("nombre", { ascending: true });
 
-      const timestamp = Date.now().toString().slice(-4);
-      const nombre_usuario = `temp_${nombreBase}_${timestamp}`;
+    if (error) throw error;
 
-      // Contraseña fija para todos los temporales
-      const password_temporal = "Temporal123!";
-      const contraseña = await bcrypt.hash(password_temporal, 10);
-
-      // Crear usuario
-      const { data, error } = await supabase
-        .from("usuario")
-        .insert({
-          nombre_usuario,
-          correo: `${nombre_usuario}@temporal.sivec.com`, // Email ficticio
-          contraseña,
-          rol_id: 1, // Piloto
-          sucursal_id,
-          es_temporal: true,
-          fecha_ultimo_uso: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      console.log(`✅ Usuario temporal creado: ${nombre_usuario}`);
-
-      return {
-        success: true,
-        usuario: data,
-        credenciales: {
-          usuario: nombre_usuario,
-          contraseña: password_temporal,
-        },
-      };
-    } catch (error) {
-      console.error("❌ Error creando piloto temporal:", error);
-      throw error;
-    }
+    return data;
   },
 
   /**
-   * Buscar si ya existe usuario para este piloto (por nombre)
+   * Obtener piloto temporal por ID
    */
-  async buscarUsuarioPorNombre(nombreCompleto) {
-    try {
-      // Buscar en usuarios permanentes
-      const { data: usuarioPermanente } = await supabase
-        .from("usuario")
-        .select("usuario_id, nombre_usuario, es_temporal")
-        .eq("es_temporal", false)
-        .ilike("nombre_usuario", `%${nombreCompleto.split(" ")[0]}%`)
-        .single();
+  async obtenerPorId(piloto_temporal_id) {
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .select("*")
+      .eq("piloto_temporal_id", piloto_temporal_id)
+      .single();
 
-      if (usuarioPermanente) return usuarioPermanente;
+    if (error) throw error;
 
-      // Buscar en usuarios temporales
-      const { data: usuarioTemporal } = await supabase
-        .from("usuario")
-        .select("usuario_id, nombre_usuario, es_temporal")
-        .eq("es_temporal", true)
-        .ilike("nombre_usuario", `%${nombreCompleto.split(" ")[0]}%`)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      return usuarioTemporal || null;
-    } catch (error) {
-      return null;
-    }
+    return data;
   },
 
   /**
-   * Listar usuarios temporales (para el admin)
+   * Verificar si existe piloto por nombre
    */
-  async listarTemporales(filtros = {}) {
-    try {
-      let query = supabase.from("usuario").select("*").eq("es_temporal", true);
+  async existePorNombre(nombre) {
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .select("piloto_temporal_id")
+      .eq("nombre", nombre.trim())
+      .single();
 
-      if (filtros.activo !== undefined) {
-        query = query.eq("activo", filtros.activo);
-      }
+    // Si no hay error, significa que existe
+    return !!data;
+  },
 
-      if (filtros.sucursal_id) {
-        query = query.eq("sucursal_id", filtros.sucursal_id);
-      }
+  /**
+   * Crear piloto temporal
+   */
+  async crear(dataPiloto) {
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .insert({
+        nombre: dataPiloto.nombre.trim(),
+        activo: true,
+        creado_por: dataPiloto.creado_por,
+        notas: dataPiloto.notas || null,
+      })
+      .select()
+      .single();
 
-      const { data, error } = await query.order("created_at", {
-        ascending: false,
-      });
+    if (error) throw error;
 
-      if (error) throw error;
+    return data;
+  },
 
-      return data;
-    } catch (error) {
-      console.error("❌ Error listando temporales:", error);
-      throw error;
-    }
+  /**
+   * Actualizar piloto temporal
+   */
+  async actualizar(piloto_temporal_id, dataPiloto) {
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .update({
+        nombre: dataPiloto.nombre.trim(),
+        notas: dataPiloto.notas || null,
+      })
+      .eq("piloto_temporal_id", piloto_temporal_id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
+  },
+
+  /**
+   * Cambiar estado activo/inactivo
+   */
+  async toggleActivo(piloto_temporal_id) {
+    // Obtener estado actual
+    const piloto = await this.obtenerPorId(piloto_temporal_id);
+
+    // Cambiar estado
+    const { data, error } = await supabase
+      .from("piloto_temporal")
+      .update({
+        activo: !piloto.activo,
+      })
+      .eq("piloto_temporal_id", piloto_temporal_id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return data;
   },
 };
 

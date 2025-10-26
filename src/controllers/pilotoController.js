@@ -33,6 +33,7 @@ const pilotoController = {
       const pilotosCombinados = [
         ...pilotosSQL.map((p) => ({
           nombre_piloto: p.nombre_piloto,
+          piloto_id: p.piloto_id,
           es_temporal: false,
           fuente: "sql",
         })),
