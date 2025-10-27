@@ -2,6 +2,7 @@
 const facturaService = require("../services/facturaService");
 const pilotoService = require("../services/pilotoService");
 const vehiculoService = require("../services/vehiculoService");
+const { supabase } = require("../config/database");
 
 const facturaController = {
   /**
@@ -398,24 +399,89 @@ const facturaController = {
   /**
    * GET /api/facturas/:numero_factura/guias-disponibles - Guías disponibles
    */
+  /**
+   * GET /api/facturas/:numero_factura/guias-disponibles - Obtener guías disponibles
+   */
   async obtenerGuiasDisponibles(req, res) {
     try {
       const { numero_factura } = req.params;
       const { piloto } = req.query;
 
-      // Llamar al servicio de integración
-      const integracionService = require("../services/integracionService");
-      const guias = await integracionService.buscarGuiasDisponibles(
-        numero_factura,
-        piloto
+      console.log(
+        `🔍 Buscando guías disponibles para factura: ${numero_factura}`
+      );
+      console.log(`👤 Piloto: ${piloto}`);
+
+      const sql = require("mssql");
+      const { sqlConfig } = require("../config/database");
+
+      // Conectar a SQL Server
+      const pool = await sql.connect(sqlConfig);
+
+      // Buscar guías en SQL Server
+      const query = `
+      SELECT 
+        d.referencia AS numero_guia,
+        d.documento AS numero_factura,
+        vd.descripcion AS detalle_producto,
+        vd.cantidad,
+        vd.direccion_entrega,
+        d.created_at AS fecha_emision
+      FROM despachos d
+      LEFT JOIN ventas_detalle vd ON d.venta_id = vd.venta_id
+      WHERE d.estado = 8 
+        AND d.referencia IS NOT NULL
+        AND d.documento = @numero_factura
+      ORDER BY d.created_at DESC
+    `;
+
+      const result = await pool
+        .request()
+        .input("numero_factura", sql.VarChar, numero_factura)
+        .query(query);
+
+      await pool.close();
+
+      console.log(
+        `📦 ${result.recordset.length} guías encontradas en SQL Server`
+      );
+
+      // Filtrar guías que NO estén ya en Supabase
+      const guiasDisponibles = [];
+
+      for (const guia of result.recordset) {
+        const { data: guiaExiste } = await supabase
+          .from("guia_remision")
+          .select("guia_id")
+          .eq("numero_guia", guia.numero_guia)
+          .single();
+
+        if (!guiaExiste) {
+          guiasDisponibles.push({
+            numero_guia: guia.numero_guia,
+            numero_factura: guia.numero_factura,
+            descripcion: guia.detalle_producto || "Sin descripción",
+            detalle_producto: guia.detalle_producto || "Sin descripción",
+            direccion_entrega: guia.direccion_entrega || "Sin dirección",
+            cantidad: guia.cantidad || 0,
+            fecha_emision: guia.fecha_emision,
+          });
+        }
+      }
+
+      console.log(
+        `✅ ${guiasDisponibles.length} guías disponibles para vincular`
       );
 
       res.json({
         success: true,
-        data: guias,
-        message: "Guías disponibles obtenidas",
+        data: guiasDisponibles,
+        total: guiasDisponibles.length,
+        message: "Guías disponibles obtenidas exitosamente",
       });
     } catch (error) {
+      console.error("❌ Error obteniendo guías disponibles:", error);
+
       res.status(500).json({
         success: false,
         error: error.message,
