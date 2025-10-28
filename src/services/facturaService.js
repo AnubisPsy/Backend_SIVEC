@@ -4,9 +4,7 @@ const { supabase } = require("../config/database");
 const facturaService = {
   /**
    * ASIGNAR FACTURA (lo que hace el jefe de yarda)
-   */
-  /**
-   * ASIGNAR FACTURA (lo que hace el jefe de yarda)
+   * Con lógica de reutilización de viajes existentes
    */
   async asignarFactura(datosFactura) {
     try {
@@ -16,12 +14,13 @@ const facturaService = {
         numero_vehiculo,
         fecha_asignacion,
         notas_jefe,
-      } = datosFactura; // ← CAMBIO: Ya no es req.body, es datosFactura
+      } = datosFactura;
 
       console.log("📋 Asignando factura:", {
         numero_factura,
         piloto,
         numero_vehiculo,
+        fecha_asignacion,
       });
 
       // Validaciones
@@ -31,38 +30,72 @@ const facturaService = {
         );
       }
 
-      // 1️⃣ CREAR EL VIAJE PRIMERO (sin guía aún)
-      const { data: viaje, error: errorViaje } = await supabase
-        .from("viaje")
-        .insert({
-          numero_vehiculo: numero_vehiculo, // ← AGREGAR
-          piloto: piloto,
-          fecha_viaje:
-            fecha_asignacion || new Date().toISOString().split("T")[0],
-          estado_viaje: 7, // Pendiente
-          creado_automaticamente: false,
-        })
-        .select("viaje_id")
-        .single();
+      const fecha = fecha_asignacion || new Date().toISOString().split("T")[0];
 
-      if (errorViaje) {
-        console.error("❌ Error creando viaje:", errorViaje);
-        throw new Error("No se pudo crear el viaje");
+      // 1️⃣ BUSCAR SI YA EXISTE UN VIAJE ACTIVO CON LOS MISMOS DATOS
+      console.log("🔍 Buscando viaje existente...");
+      console.log("Criterios:", { piloto, numero_vehiculo, fecha });
+
+      const { data: viajeExistente, error: errorBusqueda } = await supabase
+        .from("viaje")
+        .select("viaje_id, estado_viaje")
+        .eq("piloto", piloto)
+        .eq("numero_vehiculo", numero_vehiculo)
+        .eq("fecha_viaje", fecha)
+        .in("estado_viaje", [7, 8]) // 7=Pendiente, 8=En proceso (NO completado)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(); // ← Usa maybeSingle en lugar de single para evitar error si no encuentra
+
+      if (errorBusqueda) {
+        console.error("❌ Error buscando viaje:", errorBusqueda);
       }
 
-      console.log(`✅ Viaje creado: ${viaje.viaje_id}`);
+      let viaje_id;
+      let viajeCreado = false;
 
-      // 2️⃣ CREAR LA FACTURA ASIGNADA CON EL VIAJE_ID
+      if (viajeExistente) {
+        // ✅ REUTILIZAR VIAJE EXISTENTE
+        viaje_id = viajeExistente.viaje_id;
+        console.log(
+          `♻️  Reutilizando viaje existente: ${viaje_id} (Estado: ${viajeExistente.estado_viaje})`
+        );
+      } else {
+        // ✅ CREAR NUEVO VIAJE
+        console.log("✨ No se encontró viaje existente, creando uno nuevo...");
+
+        const { data: nuevoViaje, error: errorViaje } = await supabase
+          .from("viaje")
+          .insert({
+            numero_vehiculo: numero_vehiculo,
+            piloto: piloto,
+            fecha_viaje: fecha,
+            estado_viaje: 7, // Pendiente
+            creado_automaticamente: false,
+          })
+          .select("viaje_id")
+          .single();
+
+        if (errorViaje) {
+          console.error("❌ Error creando viaje:", errorViaje);
+          throw new Error("No se pudo crear el viaje");
+        }
+
+        viaje_id = nuevoViaje.viaje_id;
+        viajeCreado = true;
+        console.log(`✨ Nuevo viaje creado: ${viaje_id}`);
+      }
+
+      // 2️⃣ CREAR LA FACTURA ASIGNADA CON EL VIAJE_ID (existente o nuevo)
       const { data, error } = await supabase
         .from("factura_asignada")
         .insert({
           numero_factura,
           piloto,
           numero_vehiculo,
-          fecha_asignacion:
-            fecha_asignacion || new Date().toISOString().split("T")[0],
+          fecha_asignacion: fecha,
           estado_id: 1, // Estado: asignada
-          viaje_id: viaje.viaje_id, // ← Vincular con el viaje
+          viaje_id: viaje_id,
           notas_jefe: notas_jefe || null,
         })
         .select(
@@ -77,8 +110,11 @@ const facturaService = {
         .single();
 
       if (error) {
-        // Si falla, eliminar el viaje creado
-        await supabase.from("viaje").delete().eq("viaje_id", viaje.viaje_id);
+        // Si falla y acabamos de crear el viaje, eliminarlo
+        if (viajeCreado) {
+          await supabase.from("viaje").delete().eq("viaje_id", viaje_id);
+          console.log("🗑️  Viaje creado eliminado por error en factura");
+        }
 
         console.error("❌ Error asignando factura:", error);
         throw new Error(error.message);
@@ -87,11 +123,16 @@ const facturaService = {
       console.log(
         `✅ Factura asignada: ${data.numero_factura} (ID: ${data.factura_id})`
       );
-      console.log(`🔗 Vinculada con viaje_id: ${viaje.viaje_id}`);
+      console.log(
+        `🔗 Vinculada con viaje_id: ${viaje_id} ${
+          viajeCreado ? "(nuevo)" : "(existente)"
+        }`
+      );
 
       return {
         ...data,
-        viaje_id: viaje.viaje_id,
+        viaje_id: viaje_id,
+        viaje_nuevo: viajeCreado,
       };
     } catch (error) {
       console.error("❌ Error en asignarFactura:", error);
