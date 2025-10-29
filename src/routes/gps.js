@@ -2,9 +2,8 @@ const express = require("express");
 const router = express.Router();
 const axios = require("axios");
 
-const WIALON_TOKEN =
-  "822b5d763e6f778d00290af6eecfc0e56295BAD1E92AABF7562E3E0D323F05B94EFC88CD";
-const WIALON_URL = "https://hst-api.wialon.com/wialon/ajax.html";
+const WIALON_TOKEN = process.env.WIALON_TOKEN;
+const WIALON_URL = process.env.WIALON_URL;
 
 // Login y obtener session
 async function loginWialon() {
