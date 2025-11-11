@@ -358,6 +358,93 @@ const usuarioService = {
   async obtenerJefesYarda() {
     return await this.obtenerUsuarios({ rol_id: 2, activo: true });
   },
+
+  /**
+   * ACTUALIZAR SOLO LA SUCURSAL DE UN USUARIO (para admins que cambian de sucursal)
+   */
+  async actualizarSucursal(usuarioId, sucursalId) {
+    try {
+      console.log("🔄 Actualizando sucursal del usuario:", {
+        usuarioId,
+        nuevaSucursalId: sucursalId,
+      });
+
+      // Validar que el usuario existe
+      const { data: usuarioExistente, error: errorUsuario } = await supabase
+        .from("usuario")
+        .select("usuario_id, nombre_usuario, rol_id")
+        .eq("usuario_id", usuarioId)
+        .single();
+
+      if (errorUsuario || !usuarioExistente) {
+        throw new Error("Usuario no encontrado");
+      }
+
+      console.log("✅ Usuario encontrado:", usuarioExistente.nombre_usuario);
+
+      // Validar que la sucursal existe
+      const { data: sucursalExistente, error: errorSucursal } = await supabase
+        .from("sucursales")
+        .select("sucursal_id, nombre_sucursal")
+        .eq("sucursal_id", sucursalId)
+        .single();
+
+      if (errorSucursal || !sucursalExistente) {
+        throw new Error("Sucursal no encontrada");
+      }
+
+      console.log("✅ Sucursal encontrada:", sucursalExistente.nombre_sucursal);
+
+      // Actualizar la sucursal del usuario
+      const { data: usuarioActualizado, error: errorUpdate } = await supabase
+        .from("usuario")
+        .update({ sucursal_id: sucursalId })
+        .eq("usuario_id", usuarioId)
+        .select(
+          `
+          usuario_id,
+          nombre_usuario,
+          correo,
+          rol_id,
+          sucursal_id,
+          activo,
+          created_at,
+          roles:rol_id (
+            rol_id,
+            nombre_rol,
+            descripcion
+          ),
+          sucursales:sucursal_id (
+            sucursal_id,
+            nombre_sucursal
+          )
+        `
+        )
+        .single();
+
+      if (errorUpdate) {
+        throw new Error(`Error al actualizar sucursal: ${errorUpdate.message}`);
+      }
+
+      console.log("✅ Sucursal actualizada exitosamente");
+
+      // Formatear respuesta con el objeto sucursal anidado
+      const usuarioFormateado = {
+        ...usuarioActualizado,
+        rol: usuarioActualizado.roles,
+        sucursal: usuarioActualizado.sucursales,
+      };
+
+      // Limpiar campos temporales
+      delete usuarioFormateado.roles;
+      delete usuarioFormateado.sucursales;
+
+      return usuarioFormateado;
+    } catch (error) {
+      console.error("❌ Error en actualizarSucursal:", error);
+      throw error;
+    }
+  },
 };
 
 module.exports = usuarioService;

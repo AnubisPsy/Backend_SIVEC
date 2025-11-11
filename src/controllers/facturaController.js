@@ -24,11 +24,18 @@ const facturaController = {
       const facturaAsignada = await facturaService.asignarFactura(req.body);
 
       console.log(`✅ Factura asignada con ID: ${facturaAsignada.factura_id}`);
+      console.log(
+        `🔗 Viaje ID: ${facturaAsignada.viaje_id} ${
+          facturaAsignada.viaje_nuevo ? "(nuevo)" : "(existente reutilizado)"
+        }`
+      );
 
       res.status(201).json({
         success: true,
         data: facturaAsignada,
-        message: "Factura asignada exitosamente",
+        message: facturaAsignada.viaje_nuevo
+          ? "Factura asignada en nuevo viaje"
+          : "Factura agregada a viaje existente",
       });
     } catch (error) {
       console.error("❌ Error al asignar factura:", error.message);
@@ -300,18 +307,30 @@ const facturaController = {
 
   /**
    * GET /api/facturas/form-data - Datos para formulario de asignar factura
-   */
-  /**
-   * GET /api/facturas/form-data - Datos para formulario de asignar factura
+   * ✅ CORREGIDO: Usa req.usuario.sucursal.sucursal_id con fallback
    */
   async obtenerDatosFormulario(req, res) {
     try {
-      console.log("📋 Obteniendo datos para formulario");
-      console.log("👤 Usuario:", req.usuario);
+      console.log("═══════════════════════════════════════════════════");
+      console.log("📋 OBTENER DATOS FORMULARIO");
+      console.log("═══════════════════════════════════════════════════");
+      console.log("👤 Usuario completo:", JSON.stringify(req.usuario, null, 2));
+      console.log("📦 sucursal_id (directo):", req.usuario.sucursal_id);
+      console.log("📦 sucursal (objeto):", req.usuario.sucursal);
+      console.log(
+        "📦 sucursal.sucursal_id:",
+        req.usuario.sucursal?.sucursal_id
+      );
 
-      // Verificar que el usuario tenga sucursal_id
-      if (!req.usuario.sucursal_id) {
-        console.log("⚠️ Usuario sin sucursal_id:", req.usuario);
+      // ✅ OBTENER SUCURSAL DEL USUARIO (objeto o campo directo con fallback)
+      const sucursalId =
+        req.usuario.sucursal?.sucursal_id || req.usuario.sucursal_id;
+
+      console.log("🏢 Sucursal ID FINAL a usar:", sucursalId);
+
+      // Verificar que el usuario tenga sucursal
+      if (!sucursalId) {
+        console.log("⚠️ Usuario sin sucursal:", req.usuario);
         return res.status(400).json({
           success: false,
           error: "Usuario sin sucursal asignada",
@@ -320,7 +339,7 @@ const facturaController = {
         });
       }
 
-      // ✨ CAMBIO: Obtener pilotos del nuevo endpoint que mezcla SQL + Supabase
+      // Obtener pilotos del endpoint que mezcla SQL + Supabase
       console.log("🔍 Obteniendo pilotos (SQL + Temporales)...");
       const axios = require("axios");
       const token = req.headers.authorization;
@@ -341,21 +360,20 @@ const facturaController = {
         `✅ ${pilotos.length} pilotos obtenidos (SQL: ${pilotosResponse.data.fuentes.sql}, Temporales: ${pilotosResponse.data.fuentes.temporales})`
       );
 
-      // Obtener vehículos desde Supabase (filtrados por sucursal del usuario)
-      console.log(
-        `🔍 Obteniendo vehículos de sucursal ${req.usuario.sucursal_id}...`
-      );
+      // ✅ Obtener vehículos desde Supabase (filtrados por sucursal correcta)
+      console.log(`🔍 Obteniendo vehículos de sucursal ${sucursalId}...`);
       const vehiculos = await vehiculoService.obtenerVehiculosPorSucursal(
-        req.usuario.sucursal_id
+        sucursalId
       );
       console.log(`✅ ${vehiculos.length} vehículos obtenidos`);
+      console.log("═══════════════════════════════════════════════════");
 
       res.json({
         success: true,
         data: {
           pilotos: pilotos,
           vehiculos: vehiculos,
-          sucursal_usuario: req.usuario.sucursal_id,
+          sucursal_usuario: sucursalId, // ✅ Usar el ID correcto
         },
         message: "Datos para formulario obtenidos exitosamente",
       });
@@ -399,9 +417,6 @@ const facturaController = {
   /**
    * GET /api/facturas/:numero_factura/guias-disponibles - Guías disponibles
    */
-  /**
-   * GET /api/facturas/:numero_factura/guias-disponibles - Obtener guías disponibles
-   */
   async obtenerGuiasDisponibles(req, res) {
     try {
       const { numero_factura } = req.params;
@@ -415,23 +430,30 @@ const facturaController = {
       const sql = require("mssql");
       const { sqlConfig } = require("../config/database");
 
-      // Conectar a SQL Server
       const pool = await sql.connect(sqlConfig);
 
-      // Buscar guías en SQL Server
       const query = `
       SELECT 
+        d.despacho_id,
         d.referencia AS numero_guia,
         d.documento AS numero_factura,
-        vd.descripcion AS detalle_producto,
-        vd.cantidad,
-        vd.direccion_entrega,
-        d.created_at AS fecha_emision
+        d.created_at AS fecha_emision,
+        d.venta_id,
+        COUNT(vd.ventas_detalle_id) AS total_productos,
+        STRING_AGG(CAST(vd.descripcion AS VARCHAR(MAX)), ' | ') AS detalle_producto,
+        STRING_AGG(CAST(vd.cantidad AS VARCHAR), ' | ') AS cantidades,
+        MAX(CAST(vd.direccion_entrega AS VARCHAR(MAX))) AS direccion_entrega
       FROM despachos d
       LEFT JOIN ventas_detalle vd ON d.venta_id = vd.venta_id
       WHERE d.estado = 8 
         AND d.referencia IS NOT NULL
         AND d.documento = @numero_factura
+      GROUP BY 
+        d.despacho_id,
+        d.referencia,
+        d.documento,
+        d.created_at,
+        d.venta_id
       ORDER BY d.created_at DESC
     `;
 
@@ -446,7 +468,6 @@ const facturaController = {
         `📦 ${result.recordset.length} guías encontradas en SQL Server`
       );
 
-      // Filtrar guías que NO estén ya en Supabase
       const guiasDisponibles = [];
 
       for (const guia of result.recordset) {
@@ -463,7 +484,8 @@ const facturaController = {
             descripcion: guia.detalle_producto || "Sin descripción",
             detalle_producto: guia.detalle_producto || "Sin descripción",
             direccion_entrega: guia.direccion_entrega || "Sin dirección",
-            cantidad: guia.cantidad || 0,
+            cantidad: guia.total_productos,
+            total_productos: guia.total_productos,
             fecha_emision: guia.fecha_emision,
           });
         }

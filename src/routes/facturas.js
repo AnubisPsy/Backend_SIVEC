@@ -292,17 +292,25 @@ router.get(
           try {
             const query = `
               SELECT 
+                d.despacho_id,
                 d.referencia AS numero_guia,
                 d.documento AS numero_factura,
-                vd.descripcion AS detalle_producto,
-                vd.cantidad,
-                vd.direccion_entrega,
-                d.created_at AS fecha_emision
+                d.created_at AS fecha_emision,
+                d.venta_id,
+                COUNT(vd.ventas_detalle_id) AS total_productos,
+                STRING_AGG(CAST(vd.descripcion AS VARCHAR(MAX)), ' | ') AS detalle_producto,
+                MAX(CAST(vd.direccion_entrega AS VARCHAR(MAX))) AS direccion_entrega
               FROM despachos d
               LEFT JOIN ventas_detalle vd ON d.venta_id = vd.venta_id
               WHERE d.estado = 8 
                 AND d.referencia IS NOT NULL
                 AND d.documento = @numero_factura
+              GROUP BY 
+                d.despacho_id,
+                d.referencia,
+                d.documento,
+                d.created_at,
+                d.venta_id
               ORDER BY d.created_at DESC
             `;
 

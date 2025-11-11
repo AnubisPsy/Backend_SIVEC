@@ -58,4 +58,16 @@ router.get(
   usuarioController.obtenerJefesYarda
 );
 
+/**
+ * PUT /api/usuarios/:id/sucursal - Actualizar solo la sucursal del usuario (solo admins)
+ * NOTA: Esta ruta debe ir DESPUÉS de las rutas específicas (/roles/pilotos, etc)
+ * pero ANTES de las rutas genéricas (:id) para evitar conflictos
+ */
+router.put(
+  "/:id/sucursal",
+  verificarAuth,
+  soloAdmin,
+  usuarioController.actualizarSucursal
+);
+
 module.exports = router;

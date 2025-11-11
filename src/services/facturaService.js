@@ -2,143 +2,209 @@
 const { supabase } = require("../config/database");
 
 const facturaService = {
-  /**
-   * ASIGNAR FACTURA (lo que hace el jefe de yarda)
-   * Con lógica de reutilización de viajes existentes
-   */
-  async asignarFactura(datosFactura) {
-    try {
-      const {
-        numero_factura,
-        piloto,
-        numero_vehiculo,
-        fecha_asignacion,
-        notas_jefe,
-      } = datosFactura;
+// SOLUCIÓN COMPLETA PARA facturaService.js
+//
+// Reemplaza la función asignarFactura() completa con esta versión:
 
-      console.log("📋 Asignando factura:", {
-        numero_factura,
-        piloto,
-        numero_vehiculo,
-        fecha_asignacion,
-      });
+async asignarFactura(datosFactura) {
+  try {
+    const {
+      numero_factura,
+      piloto,
+      numero_vehiculo,
+      fecha_asignacion,
+      notas_jefe,
+    } = datosFactura;
 
-      // Validaciones
-      if (!numero_factura || !piloto || !numero_vehiculo) {
-        throw new Error(
-          "Faltan campos requeridos: numero_factura, piloto, numero_vehiculo"
-        );
-      }
+    console.log("📋 Asignando factura:", {
+      numero_factura,
+      piloto,
+      numero_vehiculo,
+      fecha_asignacion,
+    });
 
-      const fecha = fecha_asignacion || new Date().toISOString().split("T")[0];
+    // Validaciones
+    if (!numero_factura || !piloto || !numero_vehiculo) {
+      throw new Error(
+        "Faltan campos requeridos: numero_factura, piloto, numero_vehiculo"
+      );
+    }
 
-      // 1️⃣ BUSCAR SI YA EXISTE UN VIAJE ACTIVO CON LOS MISMOS DATOS
-      console.log("🔍 Buscando viaje existente...");
-      console.log("Criterios:", { piloto, numero_vehiculo, fecha });
+    const fecha = fecha_asignacion || new Date().toISOString().split("T")[0];
 
-      const { data: viajeExistente, error: errorBusqueda } = await supabase
+    // 1️⃣ BUSCAR SI YA EXISTE UN VIAJE PENDIENTE (ESTADO 7) PARA REUTILIZAR
+    console.log("🔍 Buscando viaje pendiente para reutilizar...");
+    const { data: viajePendiente, error: errorBusqueda } = await supabase
+      .from("viaje")
+      .select("viaje_id, estado_viaje")
+      .eq("piloto", piloto)
+      .eq("numero_vehiculo", numero_vehiculo)
+      .eq("fecha_viaje", fecha)
+      .eq("estado_viaje", 7) // ✅ Solo estado 7 (Pendiente)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (errorBusqueda) {
+      console.error("❌ Error buscando viaje:", errorBusqueda);
+    }
+
+    let viaje_id;
+    let viajeCreado = false;
+
+    if (viajePendiente) {
+      // ✅ REUTILIZAR VIAJE PENDIENTE
+      viaje_id = viajePendiente.viaje_id;
+      console.log(`♻️  Reutilizando viaje pendiente: ${viaje_id}`);
+    } else {
+      // 2️⃣ VALIDAR: Piloto NO debe tener viaje EN PROCESO (estado 8)
+      console.log(`🔍 Validando disponibilidad del piloto: ${piloto}`);
+      const { data: viajesPiloto, error: errorPiloto } = await supabase
         .from("viaje")
-        .select("viaje_id, estado_viaje")
+        .select("viaje_id, estado_viaje, numero_vehiculo")
         .eq("piloto", piloto)
-        .eq("numero_vehiculo", numero_vehiculo)
-        .eq("fecha_viaje", fecha)
-        .in("estado_viaje", [7, 8]) // 7=Pendiente, 8=En proceso (NO completado)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(); // ← Usa maybeSingle en lugar de single para evitar error si no encuentra
+        .eq("estado_viaje", 8) // Solo estado 8 (En proceso)
+        .limit(1);
 
-      if (errorBusqueda) {
-        console.error("❌ Error buscando viaje:", errorBusqueda);
-      }
+      if (errorPiloto) throw errorPiloto;
 
-      let viaje_id;
-      let viajeCreado = false;
-
-      if (viajeExistente) {
-        // ✅ REUTILIZAR VIAJE EXISTENTE
-        viaje_id = viajeExistente.viaje_id;
-        console.log(
-          `♻️  Reutilizando viaje existente: ${viaje_id} (Estado: ${viajeExistente.estado_viaje})`
+      if (viajesPiloto && viajesPiloto.length > 0) {
+        const viajeActivo = viajesPiloto[0];
+        throw new Error(
+          `El piloto ${piloto} ya está en ruta (Viaje ID: ${viajeActivo.viaje_id}) con el vehículo ${viajeActivo.numero_vehiculo}. Debe completar ese viaje antes de asignar uno nuevo.`
         );
-      } else {
-        // ✅ CREAR NUEVO VIAJE
-        console.log("✨ No se encontró viaje existente, creando uno nuevo...");
-
-        const { data: nuevoViaje, error: errorViaje } = await supabase
-          .from("viaje")
-          .insert({
-            numero_vehiculo: numero_vehiculo,
-            piloto: piloto,
-            fecha_viaje: fecha,
-            estado_viaje: 7, // Pendiente
-            creado_automaticamente: false,
-          })
-          .select("viaje_id")
-          .single();
-
-        if (errorViaje) {
-          console.error("❌ Error creando viaje:", errorViaje);
-          throw new Error("No se pudo crear el viaje");
-        }
-
-        viaje_id = nuevoViaje.viaje_id;
-        viajeCreado = true;
-        console.log(`✨ Nuevo viaje creado: ${viaje_id}`);
       }
 
-      // 2️⃣ CREAR LA FACTURA ASIGNADA CON EL VIAJE_ID (existente o nuevo)
-      const { data, error } = await supabase
-        .from("factura_asignada")
+      // 3️⃣ VALIDAR: Vehículo NO debe tener viaje EN PROCESO (estado 8)
+      console.log(`🔍 Validando disponibilidad del vehículo: ${numero_vehiculo}`);
+      const { data: viajesVehiculo, error: errorVehiculo } = await supabase
+        .from("viaje")
+        .select("viaje_id, estado_viaje, piloto")
+        .eq("numero_vehiculo", numero_vehiculo)
+        .eq("estado_viaje", 8) // Solo estado 8 (En proceso)
+        .limit(1);
+
+      if (errorVehiculo) throw errorVehiculo;
+
+      if (viajesVehiculo && viajesVehiculo.length > 0) {
+        const viajeActivo = viajesVehiculo[0];
+        throw new Error(
+          `El vehículo ${numero_vehiculo} está en ruta con ${viajeActivo.piloto} (Viaje ID: ${viajeActivo.viaje_id}). Debe completarse ese viaje antes de asignar uno nuevo.`
+        );
+      }
+
+      // 4️⃣ CREAR NUEVO VIAJE (validaciones pasadas)
+      console.log("✨ Creando nuevo viaje...");
+      const { data: nuevoViaje, error: errorViaje } = await supabase
+        .from("viaje")
         .insert({
-          numero_factura,
-          piloto,
-          numero_vehiculo,
-          fecha_asignacion: fecha,
-          estado_id: 1, // Estado: asignada
-          viaje_id: viaje_id,
-          notas_jefe: notas_jefe || null,
+          numero_vehiculo: numero_vehiculo,
+          piloto: piloto,
+          fecha_viaje: fecha,
+          estado_viaje: 7, // Pendiente
+          creado_automaticamente: false,
         })
-        .select(
-          `
+        .select("viaje_id")
+        .single();
+
+      if (errorViaje) {
+        console.error("❌ Error creando viaje:", errorViaje);
+        throw new Error("No se pudo crear el viaje: " + errorViaje.message);
+      }
+
+      viaje_id = nuevoViaje.viaje_id;
+      viajeCreado = true;
+      console.log(`✨ Nuevo viaje creado: ${viaje_id}`);
+    }
+
+    // 5️⃣ CREAR LA FACTURA ASIGNADA
+    const { data, error } = await supabase
+      .from("factura_asignada")
+      .insert({
+        numero_factura,
+        piloto,
+        numero_vehiculo,
+        fecha_asignacion: fecha,
+        estado_id: 1, // Estado: asignada
+        viaje_id: viaje_id,
+        notas_jefe: notas_jefe || null,
+      })
+      .select(
+        `
         *,
         estados:estado_id (
           codigo,
           nombre
         )
       `
-        )
-        .single();
+      )
+      .single();
 
-      if (error) {
-        // Si falla y acabamos de crear el viaje, eliminarlo
-        if (viajeCreado) {
-          await supabase.from("viaje").delete().eq("viaje_id", viaje_id);
-          console.log("🗑️  Viaje creado eliminado por error en factura");
-        }
-
-        console.error("❌ Error asignando factura:", error);
-        throw new Error(error.message);
+    if (error) {
+      // Si falla y acabamos de crear el viaje, eliminarlo
+      if (viajeCreado) {
+        await supabase.from("viaje").delete().eq("viaje_id", viaje_id);
+        console.log("🗑️  Viaje creado eliminado por error en factura");
       }
 
-      console.log(
-        `✅ Factura asignada: ${data.numero_factura} (ID: ${data.factura_id})`
-      );
-      console.log(
-        `🔗 Vinculada con viaje_id: ${viaje_id} ${
-          viajeCreado ? "(nuevo)" : "(existente)"
-        }`
-      );
-
-      return {
-        ...data,
-        viaje_id: viaje_id,
-        viaje_nuevo: viajeCreado,
-      };
-    } catch (error) {
-      console.error("❌ Error en asignarFactura:", error);
-      throw error;
+      console.error("❌ Error asignando factura:", error);
+      throw new Error(error.message);
     }
-  },
+
+    console.log(
+      `✅ Factura asignada: ${data.numero_factura} (ID: ${data.factura_id})`
+    );
+    console.log(
+      `🔗 Vinculada con viaje_id: ${viaje_id} ${
+        viajeCreado ? "(nuevo)" : "(existente)"
+      }`
+    );
+
+    return {
+      ...data,
+      viaje_id: viaje_id,
+      viaje_nuevo: viajeCreado,
+    };
+  } catch (error) {
+    console.error("❌ Error en asignarFactura:", error);
+    throw error;
+  }
+},
+
+// =============================================================================
+// FLUJO COMPLETO CON VALIDACIONES:
+// =============================================================================
+// 
+// Escenario 1: Agregar facturas a viaje pendiente ✅
+// -------------------------------------------------
+// 09:00 - Asignar FACT-001 (Carlos + C-20)
+//         → No hay viajes → Crea Viaje #42 (Estado 7)
+// 09:15 - Asignar FACT-002 (Carlos + C-20, mismo día)
+//         → Encuentra Viaje #42 (Estado 7) → Reutiliza ✅
+// 09:30 - Asignar FACT-003 (Carlos + C-20, mismo día)
+//         → Encuentra Viaje #42 (Estado 7) → Reutiliza ✅
+//
+// Escenario 2: Bloquear durante viaje en proceso ❌
+// -------------------------------------------------
+// 10:00 - Piloto vincula guías → Viaje #42 pasa a Estado 8
+// 10:15 - Asignar FACT-004 (Carlos + C-20)
+//         → NO encuentra viaje en Estado 7
+//         → Valida piloto: Carlos tiene Viaje #42 en Estado 8
+//         → ❌ ERROR: "Piloto ya está en ruta"
+// 10:20 - Asignar FACT-005 (Juan + C-20)
+//         → NO encuentra viaje en Estado 7
+//         → Valida vehículo: C-20 está en Viaje #42 (Estado 8)
+//         → ❌ ERROR: "Vehículo está en ruta"
+//
+// Escenario 3: Permitir después de completar ✅
+// ----------------------------------------------
+// 11:00 - Piloto completa entregas → Viaje #42 pasa a Estado 9
+// 11:15 - Asignar FACT-006 (Carlos + C-20)
+//         → NO encuentra viaje en Estado 7
+//         → Valida piloto: Carlos NO tiene viajes en Estado 8 ✅
+//         → Valida vehículo: C-20 NO tiene viajes en Estado 8 ✅
+//         → Crea Viaje #43 (Estado 7) ✅
+// =============================================================================
 
   /**
    * OBTENER FACTURAS ASIGNADAS

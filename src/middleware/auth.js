@@ -1,9 +1,11 @@
 // src/middleware/auth.js
 const authService = require("../services/authService");
+const { supabase } = require("../config/database");
 
 /**
  * MIDDLEWARE PRINCIPAL DE AUTENTICACIÓN
  * Verifica que el usuario tenga un token JWT válido
+ * ✅ CORREGIDO: Actualiza sucursal desde BD en cada request
  */
 const verificarAuth = async (req, res, next) => {
   console.log("🔐 ================================");
@@ -66,13 +68,62 @@ const verificarAuth = async (req, res, next) => {
       });
     }
 
-    // 4. Agregar datos del usuario a la request
+    // 4. Agregar datos del usuario a la request (desde token)
     req.usuario = verificacion.usuario;
 
     console.log(
-      `✅ Usuario autenticado: ${req.usuario.correo} (${req.usuario.nombre_rol})`
+      `✅ Usuario del token: ${req.usuario.correo} (${req.usuario.nombre_rol})`
     );
-    console.log("🔐 PASO 5: Pasando al siguiente middleware...");
+    console.log("📦 sucursal_id del token:", req.usuario.sucursal_id);
+
+    // 🔥 5. REFRESH SUCURSAL DESDE BD (para admins que cambiaron de sucursal)
+    if (req.usuario.usuario_id) {
+      console.log("🔄 Refrescando sucursal desde BD...");
+
+      const { data: usuarioActualizado, error: errorConsulta } = await supabase
+        .from("usuario")
+        .select(
+          `
+          sucursal_id,
+          sucursales:sucursal_id (
+            sucursal_id,
+            nombre_sucursal
+          )
+        `
+        )
+        .eq("usuario_id", req.usuario.usuario_id)
+        .single();
+
+      if (errorConsulta) {
+        console.log(
+          "⚠️ No se pudo obtener sucursal actualizada:",
+          errorConsulta.message
+        );
+        // Continuar con la sucursal del token
+      } else if (usuarioActualizado) {
+        console.log(
+          "📦 Sucursal actualizada desde BD:",
+          usuarioActualizado.sucursal_id
+        );
+
+        // Actualizar sucursal_id (campo directo)
+        req.usuario.sucursal_id = usuarioActualizado.sucursal_id;
+
+        // Actualizar objeto sucursal (si existe)
+        if (usuarioActualizado.sucursales) {
+          req.usuario.sucursal = {
+            sucursal_id: usuarioActualizado.sucursales.sucursal_id,
+            nombre_sucursal: usuarioActualizado.sucursales.nombre_sucursal,
+          };
+          console.log("✅ Objeto sucursal actualizado:", req.usuario.sucursal);
+        }
+      }
+    }
+
+    console.log(
+      `✅ Usuario final: ${req.usuario.correo} - Sucursal: ${req.usuario.sucursal_id}`
+    );
+    console.log("🔐 PASO 6: Pasando al siguiente middleware...");
     console.log("🔐 ================================");
 
     next();
