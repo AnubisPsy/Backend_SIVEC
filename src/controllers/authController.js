@@ -1,139 +1,204 @@
-// src/controllers/authController.js
+// src/controllers/authController.js - CON reCAPTCHA
 const authService = require("../services/authService");
 
 const authController = {
   /**
-   * POST /auth/login - Iniciar sesión
+   * POST /api/auth/login
+   * Login con protección reCAPTCHA
    */
   async login(req, res) {
-    console.log("📥 Body recibido:", req.body);
-    console.log("📥 Headers:", req.headers);
     try {
-      // Cambiar de 'correo' a 'loginInput'
-      const { loginInput, password } = req.body;
+      const { loginInput, password, recaptchaToken } = req.body;
 
+      // Validar campos requeridos
       if (!loginInput || !password) {
         return res.status(400).json({
           success: false,
-          error: "Usuario/correo y contraseña son requeridos",
-          message: "Datos incompletos",
+          error: "Faltan campos requeridos",
         });
       }
 
-      console.log(`🔐 Intento de login: ${loginInput}`);
+      // Obtener IP del usuario
+      const ipAddress =
+        req.headers["x-forwarded-for"]?.split(",")[0] ||
+        req.headers["x-real-ip"] ||
+        req.connection.remoteAddress ||
+        req.socket.remoteAddress ||
+        "unknown";
 
-      const resultado = await authService.login(loginInput, password);
+      console.log(`🌐 Login attempt from IP: ${ipAddress}`);
 
-      res.json({
+      // Intentar login
+      const result = await authService.login(
+        loginInput,
+        password,
+        recaptchaToken,
+        ipAddress
+      );
+
+      // Si el resultado tiene error
+      if (result.error) {
+        return res.status(401).json({
+          success: false,
+          error: result.error,
+          message: result.message,
+          requiereCaptcha: result.requiereCaptcha || false,
+        });
+      }
+
+      // Login exitoso
+      return res.status(200).json({
         success: true,
-        data: resultado,
-        message: "Login exitoso",
+        data: {
+          token: result.token,
+          usuario: result.usuario,
+        },
       });
     } catch (error) {
-      console.error("❌ Error en login:", error.message);
-
-      res.status(401).json({
+      console.error("❌ Error en authController.login:", error);
+      return res.status(500).json({
         success: false,
-        error: error.message,
-        message: "Error de autenticación",
+        error: "ERROR_SERVIDOR",
+        message: "Error interno del servidor",
       });
     }
   },
 
   /**
-   * POST /auth/verificar - Verificar si el token es válido
+   * POST /api/auth/verificar-captcha-requerido
+   * Verificar si un usuario requiere captcha (ANTES del login)
+   */
+  async verificarCaptchaRequerido(req, res) {
+    try {
+      const { loginInput } = req.body;
+
+      if (!loginInput) {
+        return res.status(400).json({
+          success: false,
+          error: "loginInput requerido",
+        });
+      }
+
+      // Obtener IP
+      const ipAddress =
+        req.headers["x-forwarded-for"]?.split(",")[0] ||
+        req.headers["x-real-ip"] ||
+        req.connection.remoteAddress ||
+        "unknown";
+
+      const resultado = await authService.verificarRequiereCaptcha(
+        loginInput,
+        ipAddress
+      );
+
+      return res.status(200).json({
+        success: true,
+        data: resultado,
+      });
+    } catch (error) {
+      console.error("❌ Error en verificarCaptchaRequerido:", error);
+      return res.status(500).json({
+        success: false,
+        error: "Error al verificar",
+      });
+    }
+  },
+
+  /**
+   * POST /api/auth/logout
+   */
+  async logout(req, res) {
+    try {
+      // Aquí podrías invalidar el token si usas una blacklist
+      // Por ahora solo confirmamos el logout
+
+      return res.status(200).json({
+        success: true,
+        message: "Logout exitoso",
+      });
+    } catch (error) {
+      console.error("❌ Error en logout:", error);
+      return res.status(500).json({
+        success: false,
+        error: "Error en logout",
+      });
+    }
+  },
+
+  /**
+   * GET /api/auth/verificar-token
    */
   async verificarToken(req, res) {
     try {
-      // El middleware verificarAuth ya validó el token
-      // Solo devolvemos los datos del usuario
+      const token = req.headers.authorization?.replace("Bearer ", "");
 
-      res.json({
+      if (!token) {
+        return res.status(401).json({
+          success: false,
+          error: "Token no proporcionado",
+        });
+      }
+
+      const resultado = await authService.verificarToken(token);
+
+      if (!resultado.valid) {
+        return res.status(401).json({
+          success: false,
+          error: resultado.error,
+        });
+      }
+
+      return res.status(200).json({
         success: true,
-        data: {
-          usuario: req.usuario,
-          token_valido: true,
-        },
-        message: "Token válido",
+        data: resultado.usuario,
       });
     } catch (error) {
-      console.error("❌ Error al verificar token:", error.message);
-
-      res.status(500).json({
+      console.error("❌ Error en verificarToken:", error);
+      return res.status(500).json({
         success: false,
-        error: error.message,
-        message: "Error al verificar token",
+        error: "Error al verificar token",
       });
     }
   },
 
   /**
-   * POST /auth/cambiar-password - Cambiar contraseña
+   * POST /api/auth/cambiar-password
    */
   async cambiarPassword(req, res) {
     try {
-      const { password_actual, password_nuevo } = req.body;
+      const { usuario_id } = req.usuario; // Del middleware de auth
+      const { passwordActual, passwordNuevo } = req.body;
 
-      if (!password_actual || !password_nuevo) {
+      if (!passwordActual || !passwordNuevo) {
         return res.status(400).json({
           success: false,
-          error: "password_actual y password_nuevo son requeridos",
-          message: "Datos incompletos",
-        });
-      }
-
-      if (password_nuevo.length < 6) {
-        return res.status(400).json({
-          success: false,
-          error: "La nueva contraseña debe tener al menos 6 caracteres",
-          message: "Contraseña muy corta",
+          error: "Faltan campos requeridos",
         });
       }
 
       await authService.cambiarPassword(
-        req.usuario.usuario_id,
-        password_actual,
-        password_nuevo
+        usuario_id,
+        passwordActual,
+        passwordNuevo
       );
 
-      console.log(`✅ Contraseña cambiada para: ${req.usuario.correo}`);
-
-      res.json({
+      return res.status(200).json({
         success: true,
-        message: "Contraseña actualizada exitosamente",
+        message: "Contraseña actualizada correctamente",
       });
     } catch (error) {
-      console.error("❌ Error al cambiar contraseña:", error.message);
+      console.error("❌ Error en cambiarPassword:", error);
 
-      res.status(400).json({
+      if (error.message === "Contraseña actual incorrecta") {
+        return res.status(400).json({
+          success: false,
+          error: error.message,
+        });
+      }
+
+      return res.status(500).json({
         success: false,
-        error: error.message,
-        message: "Error al cambiar contraseña",
-      });
-    }
-  },
-
-  /**
-   * POST /auth/logout - Cerrar sesión (solo cliente)
-   */
-  async logout(req, res) {
-    try {
-      // En JWT no hay logout real en el servidor
-      // El cliente debe eliminar el token
-
-      console.log(`👋 Logout para: ${req.usuario.correo}`);
-
-      res.json({
-        success: true,
-        message: "Sesión cerrada. Elimine el token del cliente.",
-      });
-    } catch (error) {
-      console.error("❌ Error en logout:", error.message);
-
-      res.status(500).json({
-        success: false,
-        error: error.message,
-        message: "Error en logout",
+        error: "Error al cambiar contraseña",
       });
     }
   },

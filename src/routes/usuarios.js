@@ -20,6 +20,16 @@ router.post("/", verificarAuth, soloAdmin, usuarioController.crear);
 router.get("/", verificarAuth, usuarioController.obtenerTodos);
 
 /**
+ * PUT /api/usuarios/cambiar-contrasena - Cambiar contraseña del usuario autenticado
+ * IMPORTANTE: Esta ruta debe ir ANTES de las rutas con :id para evitar conflictos
+ */
+router.put(
+  "/cambiar-contrasena",
+  verificarAuth,
+  usuarioController.cambiarContrasena
+);
+
+/**
  * GET /api/usuarios/:id - Obtener usuario por ID (requiere auth)
  */
 router.get("/:id", verificarAuth, usuarioController.obtenerPorId);

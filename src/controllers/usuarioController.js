@@ -1,5 +1,8 @@
 // src/controllers/usuarioController.js
 const usuarioService = require("../services/usuarioService");
+const bcrypt = require("bcrypt");
+const { validarPassword } = require("../utils/passwordValidator");
+const { supabase } = require("../config/database");
 
 const usuarioController = {
   /**
@@ -307,6 +310,142 @@ const usuarioController = {
         success: false,
         error: error.message,
         message: "Error al actualizar sucursal",
+      });
+    }
+  },
+
+  async cambiarContrasena(req, res) {
+    try {
+      const { passwordActual, passwordNuevo } = req.body;
+      const usuarioId = req.usuario.usuario_id; // Del middleware de autenticación
+
+      console.log("═══════════════════════════════════════════════");
+      console.log("🔐 CAMBIAR CONTRASEÑA - CONTROLLER");
+      console.log("═══════════════════════════════════════════════");
+      console.log("Usuario ID:", usuarioId);
+
+      // Validaciones básicas
+      if (!passwordActual || !passwordNuevo) {
+        console.log("❌ Faltan campos requeridos");
+        return res.status(400).json({
+          success: false,
+          message:
+            "Por favor proporciona la contraseña actual y la nueva contraseña",
+        });
+      }
+
+      // 1. Obtener usuario de Supabase
+      const { data: usuario, error: errorUsuario } = await supabase
+        .from("usuario")
+        .select("*")
+        .eq("usuario_id", usuarioId)
+        .single();
+
+      if (errorUsuario || !usuario) {
+        console.log("❌ Usuario no encontrado:", errorUsuario);
+        return res.status(404).json({
+          success: false,
+          message: "Usuario no encontrado",
+        });
+      }
+
+      console.log("✅ Usuario encontrado:", usuario.nombre_usuario);
+
+      // 2. Verificar que la contraseña actual sea correcta
+      const passwordCorrecta = await bcrypt.compare(
+        passwordActual,
+        usuario.contraseña
+      );
+
+      if (!passwordCorrecta) {
+        console.log("❌ Contraseña actual incorrecta");
+        return res.status(401).json({
+          success: false,
+          message: "La contraseña actual es incorrecta",
+        });
+      }
+
+      console.log("✅ Contraseña actual verificada");
+
+      // 3. Validar fortaleza de la nueva contraseña
+      const validacion = validarPassword(passwordNuevo, usuario.nombre_usuario);
+
+      if (!validacion.isValid) {
+        console.log(
+          "❌ Contraseña nueva no cumple requisitos:",
+          validacion.errors
+        );
+        return res.status(400).json({
+          success: false,
+          message:
+            "La nueva contraseña no cumple con los requisitos de seguridad",
+          errors: validacion.errors,
+        });
+      }
+
+      console.log("✅ Nueva contraseña cumple requisitos");
+
+      // 4. Verificar que la nueva contraseña sea diferente a la actual
+      const esLaMisma = await bcrypt.compare(passwordNuevo, usuario.contraseña);
+
+      if (esLaMisma) {
+        console.log("❌ Nueva contraseña es igual a la actual");
+        return res.status(400).json({
+          success: false,
+          message: "La nueva contraseña debe ser diferente a la actual",
+        });
+      }
+
+      console.log("✅ Nueva contraseña es diferente");
+
+      // 5. Hashear la nueva contraseña
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash(passwordNuevo, salt);
+
+      console.log("✅ Contraseña hasheada");
+
+      // 6. Actualizar la contraseña en la base de datos
+      const { error: errorActualizar } = await supabase
+        .from("usuario")
+        .update({
+          contraseña: passwordHash,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("usuario_id", usuarioId);
+
+      if (errorActualizar) {
+        console.error("❌ Error al actualizar contraseña:", errorActualizar);
+        return res.status(500).json({
+          success: false,
+          message: "Error al actualizar la contraseña",
+        });
+      }
+
+      console.log("✅ Contraseña actualizada en BD");
+
+      // 7. Registrar el cambio en logs
+      await supabase.from("log_detecciones").insert({
+        numero_factura: "SYSTEM",
+        accion: "CAMBIO_CONTRASEÑA",
+        detalles: `Usuario ${usuario.nombre_usuario} cambió su contraseña`,
+        fecha_deteccion: new Date().toISOString(),
+      });
+
+      console.log(`✅ Cambio de contraseña registrado en logs`);
+      console.log("═══════════════════════════════════════════════");
+
+      return res.status(200).json({
+        success: true,
+        message: "Contraseña actualizada exitosamente",
+      });
+    } catch (error) {
+      console.error("❌ Error en cambiarContrasena:", error);
+      console.log("═══════════════════════════════════════════════");
+
+      return res.status(500).json({
+        success: false,
+        message: "Error interno del servidor",
+        error: error.message,
       });
     }
   },
