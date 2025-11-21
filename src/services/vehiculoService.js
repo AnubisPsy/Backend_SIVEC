@@ -47,15 +47,19 @@ const vehiculoService = {
   async obtenerTodosVehiculos(filtros = {}) {
     try {
       let query = supabase.from("vehiculo").select(`
-        vehiculo_id,
-        agrupacion,
-        numero_vehiculo,
-        placa,
+      vehiculo_id,
+      agrupacion,
+      numero_vehiculo,
+      placa,
+      sucursal_id,
+      activo,
+      created_at,
+      updated_at,
+      sucursales:sucursal_id (
         sucursal_id,
-        activo,
-        created_at,
-        updated_at
-      `);
+        nombre_sucursal
+      )
+    `); // ✅ Asegúrate de que esto esté así
 
       // Aplicar filtros
       if (filtros.sucursal_id) {
@@ -66,9 +70,10 @@ const vehiculoService = {
         query = query.eq("agrupacion", filtros.agrupacion);
       }
 
-      // Filtrar solo activos por defecto, a menos que se especifique lo contrario
-      if (filtros.incluir_inactivos !== true) {
-        query = query.eq("activo", true);
+      // ✅ CAMBIO IMPORTANTE: No filtrar automáticamente por activo
+      // Solo filtrar si se especifica explícitamente
+      if (filtros.activo !== undefined) {
+        query = query.eq("activo", filtros.activo);
       }
 
       const { data, error } = await query.order("numero_vehiculo");
@@ -205,6 +210,60 @@ const vehiculoService = {
       return true;
     } catch (error) {
       console.error("❌ Error en eliminarVehiculo:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * DESACTIVAR VEHÍCULO (soft delete)
+   */
+  async desactivarVehiculo(vehiculo_id) {
+    try {
+      const { data, error } = await supabase
+        .from("vehiculo")
+        .update({
+          activo: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("vehiculo_id", vehiculo_id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Error al desactivar vehículo: ${error.message}`);
+      }
+
+      console.log(`✅ Vehículo desactivado: ${data.numero_vehiculo}`);
+      return data;
+    } catch (error) {
+      console.error("❌ Error en desactivarVehiculo:", error);
+      throw error;
+    }
+  },
+
+  /**
+   * ACTIVAR VEHÍCULO
+   */
+  async activarVehiculo(vehiculo_id) {
+    try {
+      const { data, error } = await supabase
+        .from("vehiculo")
+        .update({
+          activo: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("vehiculo_id", vehiculo_id)
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(`Error al activar vehículo: ${error.message}`);
+      }
+
+      console.log(`✅ Vehículo activado: ${data.numero_vehiculo}`);
+      return data;
+    } catch (error) {
+      console.error("❌ Error en activarVehiculo:", error);
       throw error;
     }
   },

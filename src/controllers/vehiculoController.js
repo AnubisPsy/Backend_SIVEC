@@ -5,41 +5,29 @@ const vehiculoController = {
   /**
    * GET /api/vehiculos - Obtener vehículos con filtros
    */
+  /**
+   * OBTENER TODOS LOS VEHÍCULOS
+   */
+  /**
+   * GET /api/vehiculos - Obtener vehículos con filtros
+   */
   async obtenerTodos(req, res) {
     try {
       const filtros = {};
 
-      // ✅ LÓGICA CORREGIDA
-      // 1. Si hay query param sucursal_id, usarlo (para filtros de reportes)
-      if (req.query.sucursal_id) {
+      // Filtros desde query params
+      if (req.query.sucursal_id)
         filtros.sucursal_id = parseInt(req.query.sucursal_id);
-        console.log(
-          `🔍 Filtrando por sucursal especificada: ${filtros.sucursal_id}`
-        );
-      }
-      // 2. Si NO hay query param y el usuario NO es admin, usar su sucursal
-      else if (req.usuario?.rol_id !== 3 && req.usuario?.sucursal_id) {
-        filtros.sucursal_id = req.usuario.sucursal_id;
-        console.log(
-          `🔒 Filtrando por sucursal del usuario: ${filtros.sucursal_id}`
-        );
-      }
-      // 3. Si es admin y NO especifica sucursal, mostrar TODOS
-      else if (req.usuario?.rol_id === 3) {
-        console.log(`🌐 Admin sin filtro: mostrando TODOS los vehículos`);
-        // No agregar filtro de sucursal
-      }
+      if (req.query.agrupacion) filtros.agrupacion = req.query.agrupacion;
+      if (req.query.activo !== undefined)
+        filtros.activo = req.query.activo === "true";
+      if (req.query.busqueda) filtros.busqueda = req.query.busqueda;
 
-      // Filtro de agrupación (opcional)
-      if (req.query.agrupacion) {
-        filtros.agrupacion = req.query.agrupacion;
-      }
-
-      console.log(`🔍 Obteniendo vehículos con filtros:`, filtros);
+      console.log("🔍 Obteniendo vehículos con filtros:", filtros);
 
       const vehiculos = await vehiculoService.obtenerTodosVehiculos(filtros);
 
-      console.log(`📋 ${vehiculos.length} vehículos encontrados`);
+      console.log(`✅ ${vehiculos.length} vehículos encontrados`);
 
       res.json({
         success: true,
@@ -49,8 +37,7 @@ const vehiculoController = {
         message: "Vehículos obtenidos exitosamente",
       });
     } catch (error) {
-      console.error("❌ Error al obtener vehículos:", error.message);
-
+      console.error("❌ Error obteniendo vehículos:", error);
       res.status(500).json({
         success: false,
         error: error.message,
@@ -328,6 +315,126 @@ const vehiculoController = {
         success: false,
         error: error.message,
         message: "Error al eliminar vehículo",
+      });
+    }
+  },
+
+  /**
+   * PATCH /api/vehiculos/:id/desactivar - Desactivar vehículo (soft delete)
+   */
+  async desactivar(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id || isNaN(parseInt(id))) {
+        return res.status(400).json({
+          success: false,
+          error: "ID de vehículo inválido",
+        });
+      }
+
+      // Verificar que el vehículo existe y permisos
+      const vehiculoExistente = await vehiculoService.obtenerVehiculoPorId(
+        parseInt(id)
+      );
+
+      if (!vehiculoExistente) {
+        return res.status(404).json({
+          success: false,
+          error: "Vehículo no encontrado",
+        });
+      }
+
+      // Verificar permisos
+      if (
+        req.usuario.rol_id !== 3 &&
+        req.usuario.sucursal_id !== vehiculoExistente.sucursal_id
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: "Solo puedes desactivar vehículos de tu sucursal",
+          message: "Permisos insuficientes",
+        });
+      }
+
+      console.log("🔒 Desactivando vehículo ID:", id);
+
+      const vehiculo = await vehiculoService.desactivarVehiculo(parseInt(id));
+
+      console.log(`✅ Vehículo desactivado: ${vehiculo.numero_vehiculo}`);
+
+      res.json({
+        success: true,
+        data: vehiculo,
+        message: "Vehículo desactivado exitosamente",
+      });
+    } catch (error) {
+      console.error("❌ Error al desactivar vehículo:", error.message);
+
+      res.status(400).json({
+        success: false,
+        error: error.message,
+        message: "Error al desactivar vehículo",
+      });
+    }
+  },
+
+  /**
+   * PATCH /api/vehiculos/:id/activar - Activar vehículo
+   */
+  async activar(req, res) {
+    try {
+      const { id } = req.params;
+
+      if (!id || isNaN(parseInt(id))) {
+        return res.status(400).json({
+          success: false,
+          error: "ID de vehículo inválido",
+        });
+      }
+
+      // Verificar que el vehículo existe y permisos
+      const vehiculoExistente = await vehiculoService.obtenerVehiculoPorId(
+        parseInt(id)
+      );
+
+      if (!vehiculoExistente) {
+        return res.status(404).json({
+          success: false,
+          error: "Vehículo no encontrado",
+        });
+      }
+
+      // Verificar permisos
+      if (
+        req.usuario.rol_id !== 3 &&
+        req.usuario.sucursal_id !== vehiculoExistente.sucursal_id
+      ) {
+        return res.status(403).json({
+          success: false,
+          error: "Solo puedes activar vehículos de tu sucursal",
+          message: "Permisos insuficientes",
+        });
+      }
+
+      console.log("✅ Activando vehículo ID:", id);
+
+      const vehiculo = await vehiculoService.activarVehiculo(parseInt(id));
+
+      console.log(`✅ Vehículo activado: ${vehiculo.numero_vehiculo}`);
+
+      res.json({
+        success: true,
+        data: vehiculo,
+        message: "Vehículo activado exitosamente",
+      });
+    } catch (error) {
+      console.error("❌ Error al activar vehículo:", error.message);
+
+      res.status(400).json({
+        success: false,
+        error: error.message,
+        message: "Error al activar vehículo",
       });
     }
   },
