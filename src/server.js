@@ -2,10 +2,10 @@
 require("dotenv").config();
 const { iniciarDeteccionAutomatica } = require("./services/integracionService");
 const express = require("express");
-const http = require("http"); // ← AGREGAR
+const http = require("http");
 const cors = require("cors");
 const helmet = require("helmet");
-const { setupSocketIO } = require("./sockets/socketManager"); // ← AGREGAR
+const { setupSocketIO } = require("./sockets/socketManager");
 
 // Importar rutas
 const usuarioRoutes = require("./routes/usuarios");
@@ -19,19 +19,48 @@ const sucursalesRoutes = require("./routes/sucursales");
 const pilotosTemporalesRoutes = require("./routes/pilotos-temporales");
 const guiasRoutes = require("./routes/guias");
 const estadisticasRoutes = require("./routes/estadisticas");
+const ubicacionesRoutes = require("./routes/ubicaciones");
+
+// Importar servicios
+const ubicacionesService = require("./services/ubicacionesService"); // ← AGREGAR
 
 // Importar configuración
 const { probarConexiones } = require("./config/database");
 
 const app = express();
-const httpServer = http.createServer(app); // ← CAMBIAR: crear http server
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
 // WEBSOCKETS
 // ==========================================
-const io = setupSocketIO(httpServer); // ← AGREGAR: configurar Socket.io
-app.set("io", io); // ← AGREGAR: hacer io disponible en toda la app
+const io = setupSocketIO(httpServer);
+app.set("io", io);
+
+// ✅ AGREGAR: Emisor de ubicaciones en tiempo real
+let intervalId = null;
+
+const iniciarEmisionUbicaciones = () => {
+  console.log("📡 Iniciando emisión de ubicaciones en tiempo real...");
+  
+  intervalId = setInterval(async () => {
+    try {
+      const datos = await ubicacionesService.obtenerTodasUbicaciones();
+      io.emit("ubicaciones:actualizadas", datos);
+    //  console.log(`📍 ${datos.total} ubicaciones emitidas vía WebSocket`);
+    } catch (error) {
+      console.error("❌ Error emitiendo ubicaciones:", error.message);
+    }
+  }, 15000); // 15 segundos
+};
+
+// Detener emisión al cerrar servidor
+process.on("SIGTERM", () => {
+ // console.log("🛑 Deteniendo emisión de ubicaciones...");
+  if (intervalId) {
+    clearInterval(intervalId);
+  }
+});
 
 // ==========================================
 // MIDDLEWARES
@@ -57,6 +86,7 @@ app.use("/api/gps", gpsRoutes);
 app.use("/api/sucursales", sucursalesRoutes);
 app.use("/api/pilotos-temporales", pilotosTemporalesRoutes);
 app.use("/api/estadisticas", estadisticasRoutes);
+app.use("/api/ubicaciones", ubicacionesRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -65,7 +95,8 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     status: "running",
     environment: process.env.NODE_ENV,
-    websockets: "enabled", // ← AGREGAR
+    websockets: "enabled",
+    ubicaciones_tiempo_real: "activo", // ← AGREGAR
   });
 });
 
@@ -79,7 +110,8 @@ app.get("/health", (req, res) => {
       supabase: process.env.SUPABASE_URL ? "configurado" : "no configurado",
       sqlserver: process.env.SQL_SERVER_HOST ? "configurado" : "no configurado",
     },
-    websockets: io ? "activo" : "inactivo", // ← AGREGAR
+    websockets: io ? "activo" : "inactivo",
+    ubicaciones_interval: intervalId ? "activo" : "inactivo", // ← AGREGAR
   });
 });
 
@@ -111,15 +143,17 @@ iniciarDeteccionAutomatica();
 // INICIAR SERVIDOR
 // ==========================================
 httpServer.listen(PORT, async () => {
-  // ← CAMBIAR: usar httpServer en lugar de app
   console.log("🚀 ===============================");
   console.log(`   SIVEC Backend iniciado`);
   console.log(`   Puerto: ${PORT}`);
   console.log(`   Entorno: ${process.env.NODE_ENV}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   🔌 WebSockets: HABILITADOS`); // ← AGREGAR
+  console.log(`   🔌 WebSockets: HABILITADOS`);
   console.log("🚀 ===============================");
 
   // Probar conexiones a las bases de datos
   await probarConexiones();
+
+  // ✅ INICIAR EMISIÓN DE UBICACIONES
+  iniciarEmisionUbicaciones();
 });
