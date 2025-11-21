@@ -2,8 +2,10 @@
 require("dotenv").config();
 const { iniciarDeteccionAutomatica } = require("./services/integracionService");
 const express = require("express");
+const http = require("http"); // ← AGREGAR
 const cors = require("cors");
 const helmet = require("helmet");
+const { setupSocketIO } = require("./sockets/socketManager"); // ← AGREGAR
 
 // Importar rutas
 const usuarioRoutes = require("./routes/usuarios");
@@ -16,12 +18,20 @@ const gpsRoutes = require("./routes/gps");
 const sucursalesRoutes = require("./routes/sucursales");
 const pilotosTemporalesRoutes = require("./routes/pilotos-temporales");
 const guiasRoutes = require("./routes/guias");
+const estadisticasRoutes = require("./routes/estadisticas");
 
 // Importar configuración
 const { probarConexiones } = require("./config/database");
 
 const app = express();
+const httpServer = http.createServer(app); // ← CAMBIAR: crear http server
 const PORT = process.env.PORT || 3000;
+
+// ==========================================
+// WEBSOCKETS
+// ==========================================
+const io = setupSocketIO(httpServer); // ← AGREGAR: configurar Socket.io
+app.set("io", io); // ← AGREGAR: hacer io disponible en toda la app
 
 // ==========================================
 // MIDDLEWARES
@@ -46,6 +56,7 @@ app.use("/api/viajes", viajesRoutes);
 app.use("/api/gps", gpsRoutes);
 app.use("/api/sucursales", sucursalesRoutes);
 app.use("/api/pilotos-temporales", pilotosTemporalesRoutes);
+app.use("/api/estadisticas", estadisticasRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {
@@ -54,6 +65,7 @@ app.get("/", (req, res) => {
     version: "1.0.0",
     status: "running",
     environment: process.env.NODE_ENV,
+    websockets: "enabled", // ← AGREGAR
   });
 });
 
@@ -67,6 +79,7 @@ app.get("/health", (req, res) => {
       supabase: process.env.SUPABASE_URL ? "configurado" : "no configurado",
       sqlserver: process.env.SQL_SERVER_HOST ? "configurado" : "no configurado",
     },
+    websockets: io ? "activo" : "inactivo", // ← AGREGAR
   });
 });
 
@@ -97,12 +110,14 @@ iniciarDeteccionAutomatica();
 // ==========================================
 // INICIAR SERVIDOR
 // ==========================================
-app.listen(PORT, async () => {
+httpServer.listen(PORT, async () => {
+  // ← CAMBIAR: usar httpServer en lugar de app
   console.log("🚀 ===============================");
   console.log(`   SIVEC Backend iniciado`);
   console.log(`   Puerto: ${PORT}`);
   console.log(`   Entorno: ${process.env.NODE_ENV}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
+  console.log(`   🔌 WebSockets: HABILITADOS`); // ← AGREGAR
   console.log("🚀 ===============================");
 
   // Probar conexiones a las bases de datos

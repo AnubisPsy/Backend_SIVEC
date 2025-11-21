@@ -204,6 +204,37 @@ const guiaService = {
 
     return true;
   },
+
+  /**
+   * Verificar si todas las facturas del viaje tienen guía asignada
+   */
+  async verificarTodasFacturasTienenGuia(viaje_id) {
+    const { supabase } = require("../config/database");
+
+    // Obtener todas las facturas del viaje
+    const { data: facturas } = await supabase
+      .from("factura_asignada")
+      .select("factura_id, numero_factura")
+      .eq("viaje_id", viaje_id);
+
+    if (!facturas || facturas.length === 0) {
+      return false;
+    }
+
+    // Verificar que cada factura tenga al menos una guía
+    for (const factura of facturas) {
+      const { data: guias } = await supabase
+        .from("guia_remision")
+        .select("guia_id")
+        .eq("numero_factura", factura.numero_factura);
+
+      if (!guias || guias.length === 0) {
+        return false; // Esta factura no tiene guía
+      }
+    }
+
+    return true; // Todas las facturas tienen guía
+  },
 };
 
 module.exports = guiaService;

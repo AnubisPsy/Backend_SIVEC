@@ -88,6 +88,9 @@ const guiaController = {
   /**
    * POST /api/guias - Crear guía (vincular a factura)
    */
+  /**
+   * POST /api/guias - Crear guía (vincular a factura)
+   */
   async crear(req, res) {
     try {
       const {
@@ -98,7 +101,7 @@ const guiaController = {
         fecha_emision,
       } = req.body;
 
-      console.log("🔍 Creando guía:", {
+      console.log("🔗 Enlazando guía:", {
         numero_guia,
         numero_factura,
         usuario: req.usuario.nombre_usuario,
@@ -149,17 +152,51 @@ const guiaController = {
         viaje_id,
       });
 
-      console.log(`✅ Guía creada: ${guia.numero_guia} (ID: ${guia.guia_id})`);
+      console.log(
+        `✅ Guía enlazada: ${guia.numero_guia} (ID: ${guia.guia_id})`
+      );
 
-      // Actualizar estado del viaje a "En proceso"
+      // ✅ EMITIR EVENTO: Guía asignada
+      const io = req.app.get("io");
+      io.emit("factura:guia_asignada", {
+        factura_id: guia.factura_id,
+        numero_factura: guia.numero_factura,
+        numero_guia: guia.numero_guia,
+        viaje_id: guia.viaje_id,
+        timestamp: new Date().toISOString(),
+      });
+      console.log(`🔔 Evento: factura:guia_asignada (viaje ${viaje_id})`);
+
+      // ✅ VERIFICAR SI TODAS LAS FACTURAS YA TIENEN GUÍA
       try {
-        await guiaService.actualizarEstadoViaje(viaje_id, 8);
-        console.log(
-          `✅ Viaje actualizado a estado 8 (En proceso): ${viaje_id}`
-        );
+        const todasTienenGuia =
+          await guiaService.verificarTodasFacturasTienenGuia(viaje_id);
+
+        if (todasTienenGuia) {
+          // Cambiar viaje a estado 8 (En proceso)
+          await guiaService.actualizarEstadoViaje(viaje_id, 8);
+          console.log(
+            `✅ Viaje ${viaje_id} → Estado 8 (En proceso) - Todas las facturas tienen guía`
+          );
+
+          // ✅ EMITIR EVENTO: Estado del viaje actualizado
+          io.emit("viaje:estado_actualizado", {
+            viaje_id,
+            estado_id: 8,
+            estado_nombre: "En proceso",
+            todas_guias_asignadas: true,
+            timestamp: new Date().toISOString(),
+          });
+          console.log(
+            `🔔 Evento: viaje:estado_actualizado (viaje ${viaje_id} → En proceso)`
+          );
+        } else {
+          console.log(
+            `ℹ️ Viaje ${viaje_id} aún tiene facturas sin guía asignada`
+          );
+        }
       } catch (errorViaje) {
-        console.error("⚠️ Error actualizando viaje:", errorViaje);
-        // No fallar la operación si no se puede actualizar el viaje
+        console.error("⚠️ Error verificando estado del viaje:", errorViaje);
       }
 
       res.status(201).json({
@@ -168,12 +205,12 @@ const guiaController = {
         message: "Guía vinculada exitosamente",
       });
     } catch (error) {
-      console.error("❌ Error creando guía:", error);
+      console.error("❌ Error enlazando guía:", error);
 
       res.status(500).json({
         success: false,
         error: error.message,
-        message: "Error al crear guía",
+        message: "Error al enlazar guía",
       });
     }
   },
@@ -186,7 +223,7 @@ const guiaController = {
       const { id } = req.params;
       const { estado_id } = req.body;
 
-      console.log(`🔍 Actualizando estado de guía ${id} a estado ${estado_id}`);
+      console.log(`🔄 Actualizando estado de guía ${id} a estado ${estado_id}`);
 
       // Validaciones
       if (!id || isNaN(parseInt(id))) {
@@ -212,36 +249,85 @@ const guiaController = {
         `✅ Estado actualizado: ${guia.numero_guia} → ${guia.estados.nombre}`
       );
 
-      // Si la guía fue marcada como entregada o no entregada, verificar si el viaje está completo
+      // ✅ EMITIR EVENTO: Estado de guía actualizado
+      const io = req.app.get("io");
+      io.emit("guia:estado_actualizado", {
+        guia_id: guia.guia_id,
+        numero_guia: guia.numero_guia,
+        estado_id: guia.estado_id,
+        estado_nombre: guia.estados.nombre,
+        viaje_id: guia.viaje_id,
+        timestamp: new Date().toISOString(),
+      });
+      console.log(`🔔 Evento: guia:estado_actualizado (${guia.numero_guia})`);
+
+      // Si la guía fue marcada como entregada o no entregada
       if ((estado_id === 4 || estado_id === 5) && guia.viaje_id) {
-        console.log(
-          `🔍 Verificando si viaje ${guia.viaje_id} está completado...`
-        );
+        console.log(`🔍 Verificando progreso del viaje ${guia.viaje_id}...`);
 
         try {
+          // Obtener todas las guías del viaje
+          const guiasViaje = await guiaService.obtenerGuiasDeViaje(
+            guia.viaje_id
+          );
+
+          const totalGuias = guiasViaje.length;
+          const guiasEntregadas = guiasViaje.filter(
+            (g) => g.estado_id === 4
+          ).length;
+          const guiasNoEntregadas = guiasViaje.filter(
+            (g) => g.estado_id === 5
+          ).length;
+          const guiasFinalizadas = guiasEntregadas + guiasNoEntregadas;
+          const porcentaje =
+            totalGuias > 0
+              ? Math.round((guiasFinalizadas / totalGuias) * 100)
+              : 0;
+
+          // ✅ EMITIR EVENTO: Progreso del viaje actualizado
+          io.emit("viaje:progreso_actualizado", {
+            viaje_id: guia.viaje_id,
+            total_guias: totalGuias,
+            guias_entregadas: guiasEntregadas,
+            guias_no_entregadas: guiasNoEntregadas,
+            guias_pendientes: totalGuias - guiasFinalizadas,
+            porcentaje,
+            timestamp: new Date().toISOString(),
+          });
+          console.log(`🔔 Evento: viaje:progreso_actualizado (${porcentaje}%)`);
+
+          // Verificar si el viaje está completado
           const viajeCompletado = await guiaService.verificarViajeCompletado(
             guia.viaje_id
           );
 
           if (viajeCompletado) {
             await guiaService.actualizarEstadoViaje(guia.viaje_id, 9);
-            console.log(
-              `✅ Viaje ${guia.viaje_id} completado - Todas las guías finalizadas`
-            );
+            console.log(`✅ Viaje ${guia.viaje_id} → Estado 9 (Completado)`);
+
+            // ✅ EMITIR EVENTO: Viaje completado
+            io.emit("viaje:completado", {
+              viaje_id: guia.viaje_id,
+              total_guias: totalGuias,
+              guias_entregadas: guiasEntregadas,
+              guias_no_entregadas: guiasNoEntregadas,
+              porcentaje_exito:
+                totalGuias > 0
+                  ? Math.round((guiasEntregadas / totalGuias) * 100)
+                  : 0,
+              timestamp: new Date().toISOString(),
+            });
+            console.log(`🔔 Evento: viaje:completado (viaje ${guia.viaje_id})`);
           } else {
-            const guiasViaje = await guiaService.obtenerGuiasDeViaje(
-              guia.viaje_id
-            );
             const pendientes = guiasViaje.filter(
               (g) => g.estado_id === 3
             ).length;
             console.log(
-              `ℹ️ Viaje ${guia.viaje_id} aún tiene guías pendientes (${pendientes} de ${guiasViaje.length})`
+              `ℹ️ Viaje ${guia.viaje_id}: ${pendientes} guías pendientes de ${totalGuias}`
             );
           }
         } catch (errorViaje) {
           console.error("⚠️ Error verificando viaje:", errorViaje);
-          // No fallar la operación si hay error verificando el viaje
         }
       }
 
