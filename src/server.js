@@ -20,6 +20,7 @@ const pilotosTemporalesRoutes = require("./routes/pilotos-temporales");
 const guiasRoutes = require("./routes/guias");
 const estadisticasRoutes = require("./routes/estadisticas");
 const ubicacionesRoutes = require("./routes/ubicaciones");
+const ayudaRoutes = require("./routes/ayuda");
 
 // Importar servicios
 const ubicacionesService = require("./services/ubicacionesService"); // ← AGREGAR
@@ -42,12 +43,12 @@ let intervalId = null;
 
 const iniciarEmisionUbicaciones = () => {
   console.log("📡 Iniciando emisión de ubicaciones en tiempo real...");
-  
+
   intervalId = setInterval(async () => {
     try {
       const datos = await ubicacionesService.obtenerTodasUbicaciones();
       io.emit("ubicaciones:actualizadas", datos);
-    //  console.log(`📍 ${datos.total} ubicaciones emitidas vía WebSocket`);
+      //  console.log(`📍 ${datos.total} ubicaciones emitidas vía WebSocket`);
     } catch (error) {
       console.error("❌ Error emitiendo ubicaciones:", error.message);
     }
@@ -56,7 +57,7 @@ const iniciarEmisionUbicaciones = () => {
 
 // Detener emisión al cerrar servidor
 process.on("SIGTERM", () => {
- // console.log("🛑 Deteniendo emisión de ubicaciones...");
+  // console.log("🛑 Deteniendo emisión de ubicaciones...");
   if (intervalId) {
     clearInterval(intervalId);
   }
@@ -87,6 +88,7 @@ app.use("/api/sucursales", sucursalesRoutes);
 app.use("/api/pilotos-temporales", pilotosTemporalesRoutes);
 app.use("/api/estadisticas", estadisticasRoutes);
 app.use("/api/ubicaciones", ubicacionesRoutes);
+app.use("/ayuda", ayudaRoutes);
 
 // Ruta de prueba
 app.get("/", (req, res) => {

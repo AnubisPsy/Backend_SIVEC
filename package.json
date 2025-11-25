@@ -20,7 +20,9 @@
     "joi": "^18.0.1",
     "jsonwebtoken": "^9.0.2",
     "mssql": "^11.0.1",
+    "multer": "^2.0.2",
     "node-cron": "^4.2.1",
+    "resend": "^6.5.2",
     "socket.io": "^4.8.1"
   },
   "devDependencies": {
