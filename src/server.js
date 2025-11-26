@@ -1,6 +1,5 @@
 // src/server.js
 require("dotenv").config();
-const { iniciarDeteccionAutomatica } = require("./services/integracionService");
 const express = require("express");
 const http = require("http");
 const cors = require("cors");
@@ -38,26 +37,26 @@ const PORT = process.env.PORT || 3000;
 const io = setupSocketIO(httpServer);
 app.set("io", io);
 
-// ✅ AGREGAR: Emisor de ubicaciones en tiempo real
+// Emisor de ubicaciones en tiempo real
 let intervalId = null;
 
 const iniciarEmisionUbicaciones = () => {
-  console.log("📡 Iniciando emisión de ubicaciones en tiempo real...");
+ // console.log(" Iniciando emisión de ubicaciones en tiempo real...");
 
   intervalId = setInterval(async () => {
     try {
       const datos = await ubicacionesService.obtenerTodasUbicaciones();
       io.emit("ubicaciones:actualizadas", datos);
-      //  console.log(`📍 ${datos.total} ubicaciones emitidas vía WebSocket`);
+      //  console.log(` ${datos.total} ubicaciones emitidas vía WebSocket`);
     } catch (error) {
-      console.error("❌ Error emitiendo ubicaciones:", error.message);
+      console.error(" Error emitiendo ubicaciones:", error.message);
     }
   }, 15000); // 15 segundos
 };
 
 // Detener emisión al cerrar servidor
 process.on("SIGTERM", () => {
-  // console.log("🛑 Deteniendo emisión de ubicaciones...");
+  // console.log(" Deteniendo emisión de ubicaciones...");
   if (intervalId) {
     clearInterval(intervalId);
   }
@@ -123,7 +122,7 @@ app.get("/health", (req, res) => {
 
 // Manejo de errores básico
 app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.stack);
+  console.error(" Error:", err.stack);
   res.status(500).json({
     success: false,
     message: "Error interno del servidor",
@@ -139,23 +138,21 @@ app.use((req, res) => {
   });
 });
 
-iniciarDeteccionAutomatica();
-
 // ==========================================
 // INICIAR SERVIDOR
 // ==========================================
 httpServer.listen(PORT, async () => {
-  console.log("🚀 ===============================");
+  console.log(" ===============================");
   console.log(`   SIVEC Backend iniciado`);
   console.log(`   Puerto: ${PORT}`);
   console.log(`   Entorno: ${process.env.NODE_ENV}`);
   console.log(`   Health: http://localhost:${PORT}/health`);
-  console.log(`   🔌 WebSockets: HABILITADOS`);
-  console.log("🚀 ===============================");
+  console.log(`   WebSockets: HABILITADOS`);
+  console.log(" ===============================");
 
   // Probar conexiones a las bases de datos
   await probarConexiones();
 
-  // ✅ INICIAR EMISIÓN DE UBICACIONES
+  //  INICIAR EMISIÓN DE UBICACIONES
   iniciarEmisionUbicaciones();
 });
