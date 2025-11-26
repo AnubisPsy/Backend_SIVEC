@@ -39,43 +39,43 @@ if (process.env.SQL_SERVER_TRUSTED_CONNECTION === "true") {
     type: "ntlm",
   };
   console.log(
-    `🔐 Windows Authentication configurada para: ${sqlConfig.server}`
+    ` Windows Authentication configurada para: ${sqlConfig.server}`
   );
 } else {
   // SQL Server Authentication
   sqlConfig.user = process.env.SQL_SERVER_USER;
   sqlConfig.password = process.env.SQL_SERVER_PASSWORD;
   console.log(
-    `🔐 SQL Server Authentication configurada para: ${sqlConfig.server}`
+    ` SQL Server Authentication configurada para: ${sqlConfig.server}`
   );
 }
 
 // Solo agregar puerto si está especificado explícitamente
 if (process.env.SQL_SERVER_PORT) {
   sqlConfig.port = parseInt(process.env.SQL_SERVER_PORT);
-  console.log(`🔌 Puerto SQL Server: ${sqlConfig.port}`);
+  console.log(` Puerto SQL Server: ${sqlConfig.port}`);
 }
 
 // Función para probar conexiones mejorada
 async function probarConexiones() {
-  console.log("🔍 Probando conexiones a bases de datos...");
+  console.log(" Probando conexiones a bases de datos...");
   console.log("=".repeat(50));
 
   // Probar Supabase
-  console.log("📊 Probando Supabase...");
+  console.log(" Probando Supabase...");
   try {
     const { data, error } = await supabase
       .from("usuario")
       .select("count", { count: "exact", head: true });
 
     if (error) throw error;
-    console.log("✅ Supabase: Conectado correctamente");
+    console.log(" Supabase: Conectado correctamente");
   } catch (error) {
-    console.log("❌ Supabase:", error.message);
+    console.log(" Supabase:", error.message);
   }
 
   // Probar SQL Server
-  console.log("\n🗄️ Probando SQL Server...");
+  console.log("\n Probando SQL Server...");
   console.log(`   Servidor: ${sqlConfig.server}`);
   console.log(`   Base de datos: ${sqlConfig.database}`);
   console.log(
@@ -97,13 +97,13 @@ async function probarConexiones() {
     `);
 
     const info = result.recordset[0];
-    console.log("✅ SQL Server: Conectado correctamente");
+    console.log(" SQL Server: Conectado correctamente");
     console.log(`   Servidor: ${info.servidor}`);
     console.log(`   Base de datos: ${info.base_datos}`);
     console.log(`   Usuario: ${info.usuario_actual}`);
 
     // Verificar tablas de SIVEC
-    console.log("\n🔍 Verificando tablas de SIVEC...");
+   // console.log("\n Verificando tablas de SIVEC...");
     const tablas = await pool.request().query(`
       SELECT 
         TABLE_NAME,
@@ -115,32 +115,32 @@ async function probarConexiones() {
 
     if (tablas.recordset.length === 0) {
       console.log(
-        "⚠️  No se encontraron las tablas esperadas (piloto, factura, despachos)"
+        "No se encontraron las tablas esperadas (piloto, factura, despachos)"
       );
     } else {
       tablas.recordset.forEach((tabla) => {
-        console.log(`   📋 ${tabla.TABLE_NAME}: ${tabla.columnas} columnas`);
+      //  console.log(`    ${tabla.TABLE_NAME}: ${tabla.columnas} columnas`);
       });
 
       // Contar registros
-      console.log("\n📊 Contando registros...");
+     // console.log("\n Contando registros...");
       for (const tabla of tablas.recordset) {
         try {
           const count = await pool
             .request()
             .query(`SELECT COUNT(*) as total FROM ${tabla.TABLE_NAME}`);
-          console.log(
-            `   📈 ${tabla.TABLE_NAME}: ${count.recordset[0].total} registros`
-          );
+         /*  console.log(
+            `    ${tabla.TABLE_NAME}: ${count.recordset[0].total} registros`
+          ); */
         } catch (error) {
           console.log(
-            `   ❌ ${tabla.TABLE_NAME}: Error al contar - ${error.message}`
+            `    ${tabla.TABLE_NAME}: Error al contar - ${error.message}`
           );
         }
       }
     }
   } catch (error) {
-    console.log("❌ SQL Server:", error.message);
+    console.log("SQL Server:", error.message);
 
     // Sugerir soluciones comunes
     console.log("\n💡 Posibles soluciones:");
