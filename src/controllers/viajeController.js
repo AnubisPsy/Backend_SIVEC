@@ -81,6 +81,11 @@ const viajeController = {
               (sum, f) => sum + f.guias.filter((g) => g.estado_id === 4).length,
               0
             ),
+            guias_no_entregadas: facturasConGuias.reduce(
+              (sum, f) => sum + f.guias.filter((g) => g.estado_id === 5).length,
+              0
+            ),
+            total_facturas: facturasConGuias.length,
           };
         })
       );
@@ -175,6 +180,13 @@ const viajeController = {
         0
       );
 
+      const guias_no_entregadas = facturasConGuias.reduce(
+        (sum, f) => sum + f.guias.filter((g) => g.estado_id === 5).length,
+        0
+      );
+
+      const total_facturas = facturasConGuias.length;
+
       console.log(`✅ Viaje encontrado: ${viaje.viaje_id}`);
 
       res.json({
@@ -184,6 +196,8 @@ const viajeController = {
           facturas: facturasConGuias,
           total_guias,
           guias_entregadas,
+          guias_no_entregadas,
+          total_facturas,
         },
         message: "Viaje obtenido exitosamente",
       });
