@@ -1,5 +1,6 @@
 // src/controllers/viajeController.js
 const viajeService = require("../services/viajeService");
+const { supabase } = require("../config/database");
 
 const viajeController = {
   /**
@@ -461,6 +462,127 @@ const viajeController = {
         success: false,
         error: error.message,
         message: "Error al obtener historial",
+      });
+    }
+  },
+
+  /**
+   * GET /api/viajes/piloto/:piloto_id - Obtener viajes de un piloto específico
+   */
+  async obtenerViajesPiloto(req, res) {
+    try {
+      const { piloto_id } = req.params;
+
+      console.log(`🔍 Obteniendo viajes del piloto: ${piloto_id}`);
+
+      // 1. Obtener usuario y su vinculación
+      const { data: usuario, error: errorUsuario } = await supabase
+        .from("usuario")
+        .select("piloto_sql_id, piloto_temporal_id, nombre_usuario")
+        .eq("usuario_id", piloto_id)
+        .single();
+
+      if (errorUsuario) throw errorUsuario;
+
+      let nombrePiloto = null;
+
+      // 2. Obtener nombre del piloto
+      if (usuario.piloto_temporal_id) {
+        const { data: pilotoTemp } = await supabase
+          .from("piloto_temporal")
+          .select("nombre")
+          .eq("piloto_temporal_id", usuario.piloto_temporal_id)
+          .single();
+
+        if (pilotoTemp) nombrePiloto = pilotoTemp.nombre;
+      } else if (usuario.piloto_sql_id) {
+        const sql = require("mssql");
+        const { sqlConfig } = require("../config/database");
+        const pool = await sql.connect(sqlConfig);
+
+        const result = await pool
+          .request()
+          .input("piloto_id", sql.Int, usuario.piloto_sql_id)
+          .query("SELECT nombre FROM pilotos WHERE piloto_id = @piloto_id");
+
+        await pool.close();
+
+        if (result.recordset.length > 0) {
+          nombrePiloto = result.recordset[0].nombre;
+        }
+      }
+
+      if (!nombrePiloto) {
+        nombrePiloto = usuario.nombre_usuario;
+      }
+
+      console.log(`👤 Nombre del piloto: ${nombrePiloto}`);
+
+      // 3. Obtener viajes del piloto
+      const { data: viajes, error: errorViajes } = await supabase
+        .from("viaje")
+        .select("*")
+        .or(`piloto.eq.${nombrePiloto},piloto.eq.${usuario.nombre_usuario}`)
+        .order("created_at", { ascending: false });
+
+      if (errorViajes) throw errorViajes;
+
+      // 4. Para cada viaje, obtener detalles
+      const viajesConDetalles = await Promise.all(
+        viajes.map(async (viaje) => {
+          // Obtener facturas del viaje
+          const facturas = await viajeService.obtenerFacturasDeViaje(
+            viaje.viaje_id
+          );
+
+          // Para cada factura, obtener guías
+          const facturasConGuias = await Promise.all(
+            facturas.map(async (factura) => {
+              const guias = await viajeService.obtenerGuiasDeFactura(
+                factura.numero_factura
+              );
+
+              return {
+                ...factura,
+                guias,
+              };
+            })
+          );
+
+          return {
+            ...viaje,
+            facturas: facturasConGuias,
+            total_guias: facturasConGuias.reduce(
+              (sum, f) => sum + f.guias.length,
+              0
+            ),
+            guias_entregadas: facturasConGuias.reduce(
+              (sum, f) => sum + f.guias.filter((g) => g.estado_id === 4).length,
+              0
+            ),
+            guias_no_entregadas: facturasConGuias.reduce(
+              (sum, f) => sum + f.guias.filter((g) => g.estado_id === 5).length,
+              0
+            ),
+            total_facturas: facturasConGuias.length,
+          };
+        })
+      );
+
+      console.log(`✅ ${viajesConDetalles.length} viajes encontrados`);
+
+      res.json({
+        success: true,
+        data: viajesConDetalles,
+        message: "Viajes del piloto obtenidos exitosamente",
+      });
+    } catch (error) {
+      console.error("❌ Error obteniendo viajes del piloto:", error);
+
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error al obtener viajes del piloto",
       });
     }
   },

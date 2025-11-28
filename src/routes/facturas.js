@@ -430,7 +430,15 @@ router.get(
       // 2. Obtener facturas asignadas (solo pendientes)
       const { data: facturas, error: errorFacturas } = await supabase
         .from("factura_asignada")
-        .select("*")
+        .select(
+          `
+    *,
+    viaje:viaje_id (
+      viaje_id,
+      estado_viaje
+    )
+  `
+        )
         .or(`piloto.eq.${nombrePiloto},piloto.eq.${usuario.nombre_usuario}`)
         .eq("estado_id", 1)
         .order("created_at", { ascending: false });
@@ -463,6 +471,8 @@ router.get(
 
           return {
             ...factura,
+            viaje_id: factura.viaje?.viaje_id || factura.viaje_id,
+            estado_viaje: factura.viaje?.estado_viaje || null,
             guias_vinculadas: guias || [],
             total_guias: guias?.length || 0,
             guias_pendientes:

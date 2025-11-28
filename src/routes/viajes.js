@@ -26,6 +26,15 @@ router.get("/recientes", viajeController.obtenerRecientes);
  */
 router.get("/historial", viajeController.obtenerHistorial);
 
+/**
+ * GET /api/viajes/piloto/:piloto_id - Obtener viajes de un piloto específico
+ * Headers: Authorization: Bearer <token>
+ */
+router.get(
+  "/piloto/:piloto_id",
+  verificarAuth,
+  viajeController.obtenerViajesPiloto
+);
 // ==========================================
 // RUTAS GENÉRICAS (DESPUÉS)
 // ==========================================
