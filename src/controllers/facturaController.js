@@ -3,12 +3,15 @@ const facturaService = require("../services/facturaService");
 const pilotoService = require("../services/pilotoService");
 const vehiculoService = require("../services/vehiculoService");
 const { supabase } = require("../config/database");
+const logService = require("../services/logService");
 
 const facturaController = {
   /**
    * POST /api/facturas - Asignar factura (jefe de yarda)
    */
   async asignar(req, res) {
+    const ip = req.ip || req.connection.remoteAddress; // ← NUEVO
+
     try {
       console.log("🎯 =====================================");
       console.log("📋 facturaController.asignar LLAMADO");
@@ -30,6 +33,23 @@ const facturaController = {
         }`
       );
 
+      // ✅ NUEVO: Log de factura asignada
+      await logService.operaciones.facturaAsignada({
+        usuario_id: req.usuario.usuario_id,
+        factura_id: facturaAsignada.factura_id,
+        numero_factura: req.body.numero_factura,
+        detalles: {
+          piloto: req.body.piloto,
+          vehiculo: req.body.numero_vehiculo,
+          fecha_asignacion:
+            req.body.fecha_asignacion || new Date().toISOString().split("T")[0],
+          viaje_id: facturaAsignada.viaje_id,
+          viaje_nuevo: facturaAsignada.viaje_nuevo,
+          notas: req.body.notas_jefe,
+        },
+        ip,
+      });
+
       res.status(201).json({
         success: true,
         data: facturaAsignada,
@@ -40,6 +60,21 @@ const facturaController = {
     } catch (error) {
       console.error("❌ Error al asignar factura:", error.message);
       console.error("Stack:", error.stack);
+
+      // ❌ NUEVO: Log de error
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "facturaController",
+        mensaje: `Error al asignar factura: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          input: req.body,
+        },
+        ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,
@@ -80,6 +115,17 @@ const facturaController = {
       });
     } catch (error) {
       console.error("❌ Error al obtener facturas:", error.message);
+
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "facturaController",
+        mensaje: `Error obteniendo facturas: ${error.message}`,
+        stack_trace: error.stack,
+        ip: req.ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,
@@ -199,6 +245,18 @@ const facturaController = {
       });
     } catch (error) {
       console.error("❌ Error al eliminar factura:", error.message);
+
+      await logService.operaciones.registrar({
+        usuario_id: req.usuario?.usuario_id,
+        tipo: "factura",
+        accion: "eliminada",
+        entidad_id: parseInt(id),
+        entidad_referencia: `FACTURA-${id}`,
+        detalles: {
+          motivo: "eliminacion_manual",
+        },
+        ip: req.ip,
+      });
 
       res.status(400).json({
         success: false,

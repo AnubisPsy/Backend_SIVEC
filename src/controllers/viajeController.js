@@ -1,6 +1,7 @@
 // src/controllers/viajeController.js
 const viajeService = require("../services/viajeService");
 const { supabase } = require("../config/database");
+const logService = require("../services/logService");
 
 const viajeController = {
   /**
@@ -100,6 +101,21 @@ const viajeController = {
       res.json(viajesFiltrados);
     } catch (error) {
       console.error("❌ Error obteniendo viajes:", error);
+
+      // ❌ AGREGAR: Log de error
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "viajeController",
+        mensaje: `Error obteniendo viajes: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          filtros: req.query,
+        },
+        ip: req.ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,
@@ -204,6 +220,21 @@ const viajeController = {
       });
     } catch (error) {
       console.error("❌ Error obteniendo viaje:", error);
+
+      // ❌ AGREGAR: Log de error
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "viajeController",
+        mensaje: `Error obteniendo viaje: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          viaje_id: req.params.id,
+        },
+        ip: req.ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,
@@ -458,6 +489,21 @@ const viajeController = {
     } catch (error) {
       console.error("❌ Error obteniendo historial:", error);
 
+      // ❌ AGREGAR: Log de error
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "viajeController",
+        mensaje: `Error obteniendo historial: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          filtros: req.query,
+        },
+        ip: req.ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
+
       res.status(500).json({
         success: false,
         error: error.message,
@@ -578,6 +624,21 @@ const viajeController = {
       });
     } catch (error) {
       console.error("❌ Error obteniendo viajes del piloto:", error);
+
+      // ❌ AGREGAR: Log de error
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "viajeController",
+        mensaje: `Error obteniendo viajes del piloto: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          piloto_id: req.params.piloto_id,
+        },
+        ip: req.ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,

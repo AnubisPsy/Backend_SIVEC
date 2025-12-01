@@ -1,5 +1,6 @@
 // src/controllers/guiaController.js
 const guiaService = require("../services/guiaService");
+const logService = require("../services/logService");
 
 const guiaController = {
   /**
@@ -92,6 +93,7 @@ const guiaController = {
    * POST /api/guias - Crear guía (vincular a factura)
    */
   async crear(req, res) {
+    const ip = req.ip || req.connection.remoteAddress;
     try {
       const {
         numero_guia,
@@ -156,6 +158,20 @@ const guiaController = {
         `✅ Guía enlazada: ${guia.numero_guia} (ID: ${guia.guia_id})`
       );
 
+      await logService.operaciones.guiaVinculada({
+        usuario_id: req.usuario.usuario_id,
+        guia_id: guia.guia_id,
+        numero_guia: guia.numero_guia,
+        detalles: {
+          numero_factura: guia.numero_factura,
+          viaje_id: guia.viaje_id,
+          piloto: req.usuario.nombre_usuario,
+          detalle_producto: detalle_producto || "Sin descripción",
+          direccion: direccion || "Sin dirección",
+        },
+        ip,
+      });
+
       // ✅ EMITIR EVENTO: Guía asignada
       const io = req.app.get("io");
       io.emit("factura:guia_asignada", {
@@ -175,9 +191,22 @@ const guiaController = {
         if (todasTienenGuia) {
           // Cambiar viaje a estado 8 (En proceso)
           await guiaService.actualizarEstadoViaje(viaje_id, 8);
+
           console.log(
             `✅ Viaje ${viaje_id} → Estado 8 (En proceso) - Todas las facturas tienen guía`
           );
+
+          await logService.operaciones.viajeEstadoCambiado({
+            usuario_id: null, // Sistema automático
+            viaje_id,
+            estado_anterior: 7,
+            estado_nuevo: 8,
+            detalles: {
+              motivo: "todas_guias_vinculadas",
+              usuario_ultima_guia: req.usuario.nombre_usuario,
+            },
+            ip: "sistema",
+          });
 
           // ✅ EMITIR EVENTO: Estado del viaje actualizado
           io.emit("viaje:estado_actualizado", {
@@ -207,6 +236,20 @@ const guiaController = {
     } catch (error) {
       console.error("❌ Error enlazando guía:", error);
 
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "guiaController",
+        mensaje: `Error enlazando guía: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          input: req.body,
+        },
+        ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
+
       res.status(500).json({
         success: false,
         error: error.message,
@@ -219,6 +262,7 @@ const guiaController = {
    * PATCH /api/guias/:id/estado - Actualizar estado de guía
    */
   async actualizarEstado(req, res) {
+    const ip = req.ip || req.connection.remoteAddress;
     try {
       const { id } = req.params;
       const { estado_id } = req.body;
@@ -248,6 +292,37 @@ const guiaController = {
       console.log(
         `✅ Estado actualizado: ${guia.numero_guia} → ${guia.estados.nombre}`
       );
+
+      if (estado_id === 4) {
+        // Guía entregada
+        await logService.operaciones.guiaEntregada({
+          usuario_id: req.usuario.usuario_id,
+          guia_id: guia.guia_id,
+          numero_guia: guia.numero_guia,
+          detalles: {
+            viaje_id: guia.viaje_id,
+            numero_factura: guia.numero_factura,
+            fecha_entrega: new Date().toISOString(),
+            piloto: req.usuario.nombre_usuario,
+          },
+          ip,
+        });
+      } else if (estado_id === 5) {
+        // Guía NO entregada
+        await logService.operaciones.guiaNoEntregada({
+          usuario_id: req.usuario.usuario_id,
+          guia_id: guia.guia_id,
+          numero_guia: guia.numero_guia,
+          detalles: {
+            viaje_id: guia.viaje_id,
+            numero_factura: guia.numero_factura,
+            fecha_entrega: new Date().toISOString(),
+            piloto: req.usuario.nombre_usuario,
+            motivo: req.body.motivo || "No especificado",
+          },
+          ip,
+        });
+      }
 
       // ✅ EMITIR EVENTO: Estado de guía actualizado
       const io = req.app.get("io");
@@ -305,6 +380,24 @@ const guiaController = {
             await guiaService.actualizarEstadoViaje(guia.viaje_id, 9);
             console.log(`✅ Viaje ${guia.viaje_id} → Estado 9 (Completado)`);
 
+            await logService.operaciones.viajeEstadoCambiado({
+              usuario_id: req.usuario.usuario_id,
+              viaje_id: guia.viaje_id,
+              estado_anterior: 8,
+              estado_nuevo: 9,
+              detalles: {
+                total_guias: totalGuias,
+                guias_entregadas: guiasEntregadas,
+                guias_no_entregadas: guiasNoEntregadas,
+                porcentaje_exito:
+                  totalGuias > 0
+                    ? Math.round((guiasEntregadas / totalGuias) * 100)
+                    : 0,
+                piloto: req.usuario.nombre_usuario,
+              },
+              ip,
+            });
+
             // ✅ EMITIR EVENTO: Viaje completado
             io.emit("viaje:completado", {
               viaje_id: guia.viaje_id,
@@ -338,6 +431,21 @@ const guiaController = {
       });
     } catch (error) {
       console.error("❌ Error actualizando estado:", error);
+
+      await logService.errores.error({
+        usuario_id: req.usuario?.usuario_id,
+        origen: "backend",
+        modulo: "guiaController",
+        mensaje: `Error actualizando estado: ${error.message}`,
+        stack_trace: error.stack,
+        detalles: {
+          guia_id: req.params.id,
+          estado_solicitado: req.body.estado_id,
+        },
+        ip,
+        endpoint: req.originalUrl,
+        metodo: req.method,
+      });
 
       res.status(500).json({
         success: false,
