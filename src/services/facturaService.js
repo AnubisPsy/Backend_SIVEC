@@ -100,16 +100,15 @@ const facturaService = {
           );
         }
 
-        // 4️⃣ CREAR NUEVO VIAJE (validaciones pasadas)
-        console.log("✨ Creando nuevo viaje...");
         const { data: nuevoViaje, error: errorViaje } = await supabase
           .from("viaje")
           .insert({
             numero_vehiculo: numero_vehiculo,
             piloto: piloto,
             fecha_viaje: fecha,
-            estado_viaje: 7, // Pendiente
+            estado_viaje: 7,
             creado_automaticamente: false,
+            sucursal_id: datosFactura.sucursal_id,
           })
           .select("viaje_id")
           .single();

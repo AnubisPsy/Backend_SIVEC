@@ -24,7 +24,10 @@ const facturaController = {
       );
       console.log("🎯 =====================================");
 
-      const facturaAsignada = await facturaService.asignarFactura(req.body);
+      const facturaAsignada = await facturaService.asignarFactura({
+        ...req.body,
+        sucursal_id: req.usuario.sucursal_id,
+      });
 
       console.log(`✅ Factura asignada con ID: ${facturaAsignada.factura_id}`);
       console.log(
