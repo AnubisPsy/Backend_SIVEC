@@ -513,6 +513,76 @@ const viajeController = {
   },
 
   /**
+   * GET /api/viajes/reportes/dinamico - Reportes con agrupaciones
+   */
+  async obtenerReporteDinamico(req, res) {
+    try {
+      const {
+        fecha_desde,
+        fecha_hasta,
+        piloto,
+        numero_vehiculo,
+        sucursal_id,
+        modo, // 'agregado' o 'especificar'
+        agrupar_por, // 'piloto', 'vehiculo', 'sucursal', 'fecha', 'ninguno'
+      } = req.query;
+
+      console.log("📊 Generando reporte dinámico:", {
+        modo,
+        agrupar_por,
+        fecha_desde,
+        fecha_hasta,
+      });
+
+      // Validar modo
+      if (!modo || !["agregado", "especificar"].includes(modo)) {
+        return res.status(400).json({
+          success: false,
+          error: "Modo inválido",
+          message: "El modo debe ser 'agregado' o 'especificar'",
+        });
+      }
+
+      let resultado;
+
+      if (modo === "agregado") {
+        resultado = await viajeService.obtenerReporteAgregado({
+          fecha_desde,
+          fecha_hasta,
+          piloto,
+          numero_vehiculo,
+          sucursal_id,
+          agrupar_por: agrupar_por || "piloto",
+        });
+      } else {
+        resultado = await viajeService.obtenerReporteEspecificado({
+          fecha_desde,
+          fecha_hasta,
+          piloto,
+          numero_vehiculo,
+          sucursal_id,
+          agrupar_por: agrupar_por || "piloto",
+        });
+      }
+
+      res.json({
+        success: true,
+        modo,
+        agrupar_por: agrupar_por || "piloto",
+        ...resultado,
+      });
+    } catch (error) {
+      console.error("❌ Error generando reporte dinámico:", error);
+
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        message: "Error al generar reporte",
+      });
+    }
+  },
+
+  /**
    * GET /api/viajes/piloto/:piloto_id - Obtener viajes de un piloto específico
    */
   async obtenerViajesPiloto(req, res) {
@@ -644,6 +714,70 @@ const viajeController = {
         success: false,
         error: error.message,
         message: "Error al obtener viajes del piloto",
+      });
+    }
+  },
+
+  /**
+   * GET /api/viajes/sucursales - Obtener todas las sucursales
+   */
+  async obtenerSucursales(req, res) {
+    try {
+      const sucursales = await viajeService.obtenerSucursales();
+
+      res.json({
+        success: true,
+        data: sucursales,
+      });
+    } catch (error) {
+      console.error("Error obteniendo sucursales:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  },
+
+  /**
+   * GET /api/viajes/pilotos - Obtener todos los pilotos
+   */
+  async obtenerTodosPilotos(req, res) {
+    try {
+      const pilotos = await viajeService.obtenerTodosPilotos();
+
+      res.json({
+        success: true,
+        data: pilotos,
+      });
+    } catch (error) {
+      console.error("Error obteniendo pilotos:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  },
+
+  /**
+   * GET /api/viajes/vehiculos - Obtener vehículos (opcionalmente filtrados por sucursal)
+   */
+  async obtenerVehiculosPorSucursal(req, res) {
+    try {
+      const { sucursal_id } = req.query;
+
+      const vehiculos = await viajeService.obtenerVehiculosPorSucursal(
+        sucursal_id
+      );
+
+      res.json({
+        success: true,
+        data: vehiculos,
+      });
+    } catch (error) {
+      console.error("Error obteniendo vehículos:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
       });
     }
   },
