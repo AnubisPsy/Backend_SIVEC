@@ -130,21 +130,31 @@ const ubicacionesService = {
       const { data: vehiculos } = await queryVehiculos;
 
       // 4. Obtener viajes activos
+      // 4. Obtener viajes activos
       const { data: viajes } = await supabase
         .from("viaje")
         .select(
           `
-        viaje_id,
-        numero_vehiculo,
-        piloto,
-        estado_viaje,
-        fecha_viaje,
-        estados:estado_viaje (
-          nombre
-        )
-      `
+    viaje_id,
+    numero_vehiculo,
+    piloto,
+    estado_viaje,
+    fecha_viaje,
+    estados:estado_viaje (
+      nombre
+    )
+  `
         )
         .in("estado_viaje", [7, 8]);
+
+      // ✅ AGREGAR ESTOS LOGS:
+      console.log("🚛 VIAJES ACTIVOS ENCONTRADOS:", viajes?.length || 0);
+      console.log("🚛 Viajes:", viajes);
+      console.log("🚛 Ejemplo viaje:", viajes?.[0]);
+      console.log(
+        "🚛 Números de vehículo con viaje:",
+        viajes?.map((v) => v.numero_vehiculo)
+      );
 
       // 5. Correlacionar usando la MISMA lógica de gps.js
       //   console.log("\n🔗 CORRELACIONANDO POR PLACA (entre paréntesis)...");
@@ -178,8 +188,8 @@ const ubicacionesService = {
         let latitud = null;
         let longitud = null;
         let velocidad = 0;
-        let direccion = 0; 
-        let ultima_actualizacion = null;       
+        let direccion = 0;
+        let ultima_actualizacion = null;
 
         if (unidadWialon && unidadWialon.pos) {
           const pos = unidadWialon.pos;
@@ -197,6 +207,16 @@ const ubicacionesService = {
         const viaje = viajes?.find(
           (v) => v.numero_vehiculo === vehiculo.numero_vehiculo
         );
+
+        // ✅ AGREGAR ESTE LOG:
+        if (vehiculo.numero_vehiculo === "C-101") {
+          console.log(`🔍 DEBUG C-101:`, {
+            vehiculo_numero: vehiculo.numero_vehiculo,
+            viaje_encontrado: !!viaje,
+            viaje_data: viaje,
+            todos_los_viajes: viajes?.map((v) => v.numero_vehiculo),
+          });
+        }
 
         return {
           vehiculo_id: vehiculo.vehiculo_id,

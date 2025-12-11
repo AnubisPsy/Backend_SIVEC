@@ -46,7 +46,7 @@ const iniciarEmisionUbicaciones = () => {
   intervalId = setInterval(async () => {
     try {
       const datos = await ubicacionesService.obtenerTodasUbicaciones();
-      io.emit("ubicaciones:actualizadas", datos);
+      io.emit("ubicaciones_actualizadas", datos);
       //  console.log(` ${datos.total} ubicaciones emitidas vía WebSocket`);
     } catch (error) {
       console.error(" Error emitiendo ubicaciones:", error.message);
