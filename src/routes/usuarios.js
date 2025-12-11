@@ -80,4 +80,14 @@ router.put(
   usuarioController.actualizarSucursal
 );
 
+/**
+ * POST /api/usuarios/:usuario_id/migrar-piloto - Migrar piloto temporal a permanente
+ */
+router.post(
+  "/:usuario_id/migrar-piloto",
+  verificarAuth,
+  soloAdmin,
+  usuarioController.migrarPilotoAPermanente
+);
+
 module.exports = router;

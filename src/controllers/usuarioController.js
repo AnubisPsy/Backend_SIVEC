@@ -3,6 +3,7 @@ const usuarioService = require("../services/usuarioService");
 const bcrypt = require("bcrypt");
 const { validarPassword } = require("../utils/passwordValidator");
 const { supabase } = require("../config/database");
+const sql = require("mssql");
 
 const usuarioController = {
   /**
@@ -446,6 +447,160 @@ const usuarioController = {
         success: false,
         message: "Error interno del servidor",
         error: error.message,
+      });
+    }
+  },
+
+  async migrarPilotoAPermanente(req, res) {
+    try {
+      const { usuario_id } = req.params;
+      const { piloto_sql_id, desactivar_temporal = true } = req.body;
+
+      console.log("=== INICIO MIGRACIÓN ===");
+      console.log("1. Datos recibidos:", {
+        usuario_id,
+        piloto_sql_id,
+        desactivar_temporal,
+      });
+
+      // 1. Obtener usuario actual
+      console.log("2. Obteniendo usuario de Supabase...");
+      const { data: usuario, error: errorUsuario } = await supabase
+        .from('usuario')
+        .select(`
+          usuario_id,
+          nombre_usuario,
+          correo,
+          piloto_temporal_id,
+          piloto_temporal!piloto_temporal_id (
+            piloto_temporal_id,
+            nombre,
+            notas
+          )
+        `)
+        .eq('usuario_id', usuario_id)
+        .single();
+
+      console.log("3. Usuario obtenido:", usuario);
+      console.log("4. Error de Supabase:", errorUsuario);
+
+      if (errorUsuario || !usuario) {
+        console.log("❌ Usuario no encontrado");
+        return res.status(404).json({
+          success: false,
+          error: "Usuario no encontrado",
+        });
+      }
+
+      if (!usuario.piloto_temporal_id) {
+        console.log("❌ Usuario sin piloto temporal");
+        return res.status(400).json({
+          success: false,
+          error: "El usuario no tiene un piloto temporal asignado",
+        });
+      }
+
+      // 2. Verificar piloto SQL existe
+      console.log("5. Verificando piloto en SQL Server...");
+
+      // ✅ Usar la función que ya existe en database.js
+      const { obtenerConexionSQL } = require("../config/database");
+      const pool = await obtenerConexionSQL();
+
+      const mssql = require("mssql");
+      const resultPiloto = await pool
+        .request()
+        .input("pilotoId", mssql.Int, piloto_sql_id)
+        .query(
+          "SELECT piloto_id, nombre, activo FROM pilotos WHERE piloto_id = @pilotoId"
+        );
+
+      console.log("6. Piloto SQL encontrado:", resultPiloto.recordset);
+
+      if (resultPiloto.recordset.length === 0) {
+        console.log("❌ Piloto SQL no encontrado");
+        return res.status(404).json({
+          success: false,
+          error: "El piloto especificado no existe en el sistema SQL Server",
+        });
+      }
+
+      const pilotoSQL = resultPiloto.recordset[0];
+
+      if (!pilotoSQL.activo) {
+        console.log("❌ Piloto SQL inactivo");
+        return res.status(400).json({
+          success: false,
+          error: "El piloto especificado está marcado como inactivo",
+        });
+      }
+
+      // 3. Actualizar usuario
+      console.log("7. Actualizando usuario en Supabase...");
+      const { error: errorUpdate } = await supabase
+        .from("usuario")
+        .update({
+          piloto_sql_id: piloto_sql_id,
+          piloto_temporal_id: null,
+          supabase_piloto_id: null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("usuario_id", usuario_id);
+
+      console.log("8. Error de actualización:", errorUpdate);
+
+      if (errorUpdate) {
+        console.log("❌ Error actualizando usuario");
+        throw new Error(`Error al actualizar usuario: ${errorUpdate.message}`);
+      }
+
+      console.log("✅ Usuario actualizado");
+
+      // 4. Desactivar piloto temporal
+      if (desactivar_temporal && usuario.piloto_temporal_id) {
+        console.log("9. Desactivando piloto temporal...");
+
+        const notaMigracion = `Migrado a piloto SQL ID ${piloto_sql_id} el ${new Date().toISOString()}`;
+
+        const { error: errorTemporal } = await supabase
+          .from("piloto_temporal")
+          .update({
+            activo: false,
+            notas: notaMigracion,
+          })
+          .eq("piloto_temporal_id", usuario.piloto_temporal_id);
+
+        console.log("10. Error desactivando temporal:", errorTemporal);
+        console.log("✅ Piloto temporal desactivado");
+      }
+
+      console.log("11. Preparando respuesta...");
+
+      const respuesta = {
+        success: true,
+        message: "Piloto migrado exitosamente",
+        data: {
+          usuario_id: usuario.usuario_id,
+          nombre_usuario: usuario.nombre_usuario,
+          piloto_temporal_anterior: usuario.piloto_temporal?.nombre || "N/A",
+          piloto_sql_nuevo: pilotoSQL.nombre,
+          piloto_sql_id: piloto_sql_id,
+        },
+      };
+
+      console.log("12. Respuesta preparada:", JSON.stringify(respuesta));
+      console.log("=== FIN MIGRACIÓN EXITOSA ===");
+
+      return res.json(respuesta);
+    } catch (error) {
+      console.error("❌ ERROR EN MIGRACIÓN:");
+      console.error("Tipo:", error.constructor.name);
+      console.error("Mensaje:", error.message);
+      console.error("Stack:", error.stack);
+
+      return res.status(500).json({
+        success: false,
+        error: error.message || "Error al migrar piloto",
       });
     }
   },

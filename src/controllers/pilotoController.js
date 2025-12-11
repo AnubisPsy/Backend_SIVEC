@@ -215,6 +215,34 @@ const pilotoController = {
       });
     }
   },
+
+  /**
+   * GET /api/pilotos/sql - Obtener pilotos de SQL Server (para migración)
+   */
+  async obtenerPilotosSQL(req, res) {
+    try {
+      console.log("🔍 Obteniendo pilotos SQL para migración...");
+
+      const pilotos = await pilotoService.obtenerTodosPilotos();
+
+      console.log(`✅ ${pilotos.length} pilotos SQL encontrados`);
+
+      res.json({
+        success: true,
+        pilotos: pilotos.map((p) => ({
+          piloto_id: p.piloto_id,
+          nombre: p.nombre_piloto,
+          activo: true,
+        })),
+      });
+    } catch (error) {
+      console.error("❌ Error obteniendo pilotos SQL:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message || "Error al obtener pilotos de SQL Server",
+      });
+    }
+  },
 };
 
 module.exports = pilotoController;

@@ -29,6 +29,17 @@ router.get("/buscar", verificarAuth, pilotoController.buscar);
  */
 router.post("/validar", verificarAuth, pilotoController.validar);
 
+/**
+ * GET /api/pilotos/sql - Obtener pilotos SQL Server para migración (solo admins)
+ * Headers: Authorization: Bearer <token>
+ */
+router.get(
+  "/sql",
+  verificarAuth,
+  soloAdmin,
+  pilotoController.obtenerPilotosSQL
+);
+
 // ==========================================
 // RUTAS ADMINISTRATIVAS
 // ==========================================
