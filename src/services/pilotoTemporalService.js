@@ -6,14 +6,34 @@ const pilotoTemporalService = {
    * Obtener todos los pilotos temporales
    */
   async obtenerTodos() {
-    const { data, error } = await supabase
+    // Obtener todos los pilotos temporales
+    const { data: pilotos, error } = await supabase
       .from("piloto_temporal")
       .select("*")
       .order("nombre", { ascending: true });
 
     if (error) throw error;
 
-    return data;
+    // Obtener usuarios que tienen piloto temporal Y piloto SQL (migrados)
+    const { data: usuariosMigrados, error: errorUsuarios } = await supabase
+      .from("usuario")
+      .select("piloto_temporal_id")
+      .not("piloto_temporal_id", "is", null)
+      .not("piloto_sql_id", "is", null);
+
+    if (errorUsuarios) throw errorUsuarios;
+
+    // IDs de pilotos temporales que fueron migrados
+    const idsMigrados = usuariosMigrados.map((u) => u.piloto_temporal_id);
+
+    // Agregar campo "migrado" a cada piloto
+    const pilotosConMigrado = pilotos.map((piloto) => ({
+      ...piloto,
+      migrado: idsMigrados.includes(piloto.piloto_temporal_id),
+    }));
+
+    // Filtrar solo los que NO están migrados
+    return pilotosConMigrado.filter((p) => !p.migrado);
   },
 
   /**
