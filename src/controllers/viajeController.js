@@ -9,7 +9,7 @@ const viajeController = {
    */
   async obtenerTodos(req, res) {
     try {
-      const { estado } = req.query;
+      const { estado, numero_vehiculo } = req.query;
       const usuario = req.usuario;
 
       console.log(
@@ -17,7 +17,10 @@ const viajeController = {
       );
 
       // Obtener viajes con filtros
-      const viajes = await viajeService.obtenerViajes({ estado });
+      const viajes = await viajeService.obtenerViajes({
+        estado,
+        numero_vehiculo,
+      });
 
       console.log(`📋 Total viajes encontrados: ${viajes.length}`);
 
@@ -98,7 +101,10 @@ const viajeController = {
         `✅ Viajes mostrados: ${viajesFiltrados.length} de ${viajes.length}`
       );
 
-      res.json(viajesFiltrados);
+      res.json({
+        success: true,
+        data: viajesFiltrados,
+      });
     } catch (error) {
       console.error("❌ Error obteniendo viajes:", error);
 

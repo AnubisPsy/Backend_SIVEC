@@ -22,6 +22,11 @@ const viajeService = {
       query = query.eq("estado_viaje", filtros.estado);
     }
 
+    // Filtrar por número de vehículo
+    if (filtros.numero_vehiculo) {
+      query = query.eq("numero_vehiculo", filtros.numero_vehiculo);
+    }
+
     const { data, error } = await query.order("created_at", {
       ascending: false,
     });
